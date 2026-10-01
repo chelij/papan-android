@@ -20,7 +20,7 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Install pinned Android SDK components
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"'
       - run: npm run check
       - name: Compile and verify with a disposable signing key
         run: npm run build:android
