@@ -1,0 +1,13 @@
+<resources>
+  <style name="PapanTheme" parent="android:style/Theme.Material.NoActionBar">
+    <item name="android:windowBackground">#000000</item>
+    <item name="android:colorAccent">#c4e7a9</item>
+    <item name="android:colorControlHighlight">#3a4932</item>
+    <item name="android:textColorPrimary">#ececea</item>
+    <item name="android:textColorSecondary">#a0a69a</item>
+    <item name="android:statusBarColor">#000000</item>
+    <item name="android:navigationBarColor">#000000</item>
+    <item name="android:windowLightStatusBar">false</item>
+    <item name="android:windowLightNavigationBar">false</item>
+  </style>
+</resources>

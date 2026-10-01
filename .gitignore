@@ -1,0 +1,8 @@
+artifacts/
+dist/
+node_modules/
+*.keystore
+*.jks
+.env
+.DS_Store
+*.log
