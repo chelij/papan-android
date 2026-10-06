@@ -2,7 +2,7 @@
 
 Share or paste a link on your phone and save it into a collection in [Papan desktop](https://github.com/chelij/papan). Pair locally with a QR code; the desktop extracts and saves the media. No cloud account or app-store credentials are needed.
 
-[Download the APK](https://github.com/chelij/papan-android/releases/latest) · [Desktop downloads](https://github.com/chelij/papan/releases/latest) · [Local sharing protocol and troubleshooting](https://github.com/chelij/papan/blob/main/docs/mobile-sharing.md)
+[Download the APK](https://github.com/chelij/papan-android/releases/latest) · [Desktop downloads](https://github.com/chelij/papan/releases/latest) · [Local sharing protocol and troubleshooting](https://github.com/chelij/papan/blob/main/docs/mobile-sharing.md) · [Ecosystem and compatibility](https://github.com/chelij/papan/blob/main/docs/ecosystem.md)
 
 ## Use it
 
