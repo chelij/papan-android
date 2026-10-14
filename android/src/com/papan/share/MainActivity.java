@@ -379,15 +379,16 @@ public final class MainActivity extends AppCompatActivity {
                 if (item != null && "image".equals(item.optString("kind"))) preview.addView(imageFrame(pin, item, fromDesktop, appearance.getBoolean("fill:" + boardPreferenceKey(), true)), new FrameLayout.LayoutParams(-1, -1));
                 else if (notice == null) { String excerpt = item == null ? pin.optString("notes") : item.optString("text"); TextView kind = text(excerpt.isEmpty() ? item != null && "video".equals(item.optString("kind")) ? "Video" : "Saved link" : excerpt, 16); kind.setTextColor(MUTED); kind.setPadding(dp(12), dp(10), dp(12), 0); kind.setEllipsize(android.text.TextUtils.TruncateAt.END); kind.setMaxLines(1); preview.addView(kind, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP)); }
             } catch (Exception error) { TextView failed = text("Preview unavailable", 14); failed.setPadding(dp(12), dp(10), dp(12), 0); preview.addView(failed); }
-            if (notice != null) { TextView state = text(notice, 12); state.setTextColor(MUTED); state.setBackgroundColor(getColor(R.color.papan_background)); state.setPadding(dp(10), dp(6), dp(10), dp(6)); state.setMaxLines(1); state.setEllipsize(android.text.TextUtils.TruncateAt.END); preview.addView(state, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP)); }
             LinearLayout overlay = column(), caption = column();
-            View fade = new View(MainActivity.this); fade.setBackground(new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, new int[] {Color.TRANSPARENT, 0xB3000000})); overlay.addView(fade, new LinearLayout.LayoutParams(-1, dp(20)));
-            // All caption glyphs sit on the 70% black plateau, even over a white image.
-            caption.setBackgroundColor(0xB3000000); caption.setPadding(dp(10), dp(4), dp(10), dp(8)); overlay.addView(caption);
-            TextView title = text(pin.optString("title", pin.optString("sourceUrl")), 14); title.setTextColor(Color.WHITE); title.setTypeface(android.graphics.Typeface.create("sans-serif-medium", 0)); title.setMaxLines(frameHeight < 140 ? 1 : 2); title.setEllipsize(android.text.TextUtils.TruncateAt.END); caption.addView(title);
+            overlay.setBackground(new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, new int[] {Color.TRANSPARENT, 0xB3000000, 0xD9000000}));
+            View spacing = new View(MainActivity.this); overlay.addView(spacing, new LinearLayout.LayoutParams(-1, dp(Math.round(50 * getResources().getConfiguration().fontScale))));
+            caption.setPadding(dp(15), 0, dp(15), dp(16)); overlay.addView(caption);
+            TextView title = text(pin.optString("title", pin.optString("sourceUrl")), 12); title.setTextColor(0xFFECECEA); title.setPadding(0, 0, 0, 0); title.setMaxLines(1); title.setEllipsize(android.text.TextUtils.TruncateAt.END); LinearLayout.LayoutParams titleSize = new LinearLayout.LayoutParams(-1, -2); titleSize.bottomMargin = dp(5); caption.addView(title, titleSize);
             String host; try { host = new java.net.URI(pin.optString("sourceUrl")).getHost(); } catch (Exception ignored) { host = null; }
-            TextView source = text(host == null ? "Saved reference" : host, 12); source.setTextColor(0xFFE6E6E6); source.setMaxLines(1); source.setEllipsize(android.text.TextUtils.TruncateAt.END); caption.addView(source);
+            TextView source = text(host == null ? "Saved reference" : host.replaceFirst("^www\\.", ""), 10); source.setTextColor(0xFFAAAAAA); source.setPadding(0, 0, 0, 0); source.setMaxLines(1); source.setEllipsize(android.text.TextUtils.TruncateAt.END); caption.addView(source);
             preview.addView(overlay, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+            View placeholder = preview.getChildAt(0); if (placeholder instanceof TextView) { placeholder.setBackgroundColor(getColor(R.color.papan_background)); preview.bringChildToFront(placeholder); }
+            if (notice != null) { TextView state = text(notice, 12); state.setTextColor(MUTED); state.setBackgroundColor(getColor(R.color.papan_background)); state.setPadding(dp(10), dp(6), dp(10), dp(6)); state.setMaxLines(1); state.setEllipsize(android.text.TextUtils.TruncateAt.END); preview.addView(state, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP)); }
         }
         @Override public void onViewRecycled(RecyclerView.ViewHolder holder) { if (holder instanceof CardHolder) ((CardHolder)holder).body.removeAllViews(); }
     }
