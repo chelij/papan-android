@@ -82,7 +82,12 @@ public final class MobileFlowTest extends Instrumentation {
                 onMain(() -> { View card = description(main.getWindow().getDecorView(), "Open pin: " + local.optString("title")); require(card != null, "Phone pin card missing."); card.performClick(); });
                 click(main, "Edit title and notes"); input("Title", "Pocket reference"); input("Notes", "Saved without desktop"); click(main, "Save changes");
                 input("Search this collection", "does not match"); require(text(main).contains("No matching pins."), "Phone collection search did not filter."); input("Search this collection", "Pocket reference"); require(text(main).contains("Pocket reference"), "Phone pin edit/search failed."); input("Search this collection", "");
-                await(() -> hasImage(main.getWindow().getDecorView()), 5000, "Edited phone card did not decode its preview."); screenshot(main, "local.png");
+                await(() -> hasImage(main.getWindow().getDecorView()), 5000, "Edited phone card did not decode its preview."); alignedBoard(); screenshot(main, "local.png");
+                MobileLibrary.get(main).captured(local.getString("id"), new JSONObject().put("capture", "failed"));
+                onMain(() -> { try { Method refresh = MainActivity.class.getDeclaredMethod("refreshLocal"); refresh.setAccessible(true); refresh.invoke(main); } catch (Exception error) { throw new RuntimeException(error); } });
+                await(() -> hasImage(main.getWindow().getDecorView()) && text(main).contains("Preview unavailable"), 5000, "Failed retry hid its status behind cached media/notes."); alignedBoard();
+                onMain(() -> { View card = description(main.getWindow().getDecorView(), "Open pin: Pocket reference"); require(captionText(card, "127.0.0.1") != null, "Failed retry hid the source website."); });
+                MobileLibrary.get(main).captured(local.getString("id"), new JSONObject().put("capture", "saved"));
                 Field singleton = MobileLibrary.class.getDeclaredField("instance"); singleton.setAccessible(true); singleton.set(null, null);
                 require(MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 2 && MobileLibrary.get(main).snapshot().toString().contains("Saved without desktop"), "Phone library did not survive a storage reopen.");
                 require(PhoneStore.get(main).snapshot().getJSONArray("entries").length() == 0, "Local save entered desktop queue.");
@@ -178,6 +183,7 @@ public final class MobileFlowTest extends Instrumentation {
         await(() -> MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 3 && "saved".equals(MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(2).optString("capture")), 15000, "Direct video was not captured on phone.");
         JSONObject pin = MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(2); File media = MobileLibrary.get(main).mediaFile(pin.getString("mediaFile")); require(media.isFile(), "Local video bytes missing.");
         await(() -> has("Open pin: " + url), 5000, "Captured video did not appear on the phone board.");
+        alignedBoard(); screenshot(main, "video-board.png");
         onMain(() -> { View card = description(main.getWindow().getDecorView(), "Open pin: " + url); require(card != null, "Video pin missing."); card.performClick(); }); click(main, "Play video");
         await(() -> field(main, "video") != null && ((android.widget.VideoView)field(main, "video")).getCurrentPosition() > 200, 10000, "Saved phone video did not play.");
         click(main, "Delete from phone"); click(main, "Delete"); await(() -> MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 2 && !media.exists(), 5000, "Phone delete did not remove saved media.");
@@ -207,6 +213,7 @@ public final class MobileFlowTest extends Instrumentation {
         String failedUrl = url.replace("/wide.png", "/missing");
         clip(failedUrl); click(main, "Paste link"); click(main, "On phone · Temporary check");
         await(() -> MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 3 && "failed".equals(MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(2).optString("capture")), 10000, "Failed capture did not retain its link.");
+        await(() -> has("Open pin: " + failedUrl) && text(main).contains("Preview unavailable"), 5000, "Failed preview did not expose its status and link."); alignedBoard(); screenshot(main, "failed-board.png");
         onMain(() -> { View card = description(main.getWindow().getDecorView(), "Open pin: " + failedUrl); require(card != null, "Failed reference missing."); card.performClick(); });
         click(main, "Retry preview");
         await(() -> "failed".equals(MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(2).optString("capture")), 10000, "Capture retry did not settle.");
@@ -259,7 +266,7 @@ public final class MobileFlowTest extends Instrumentation {
         relaunch(720, 1600, 1);
         MobileLibrary store = MobileLibrary.get(main); String collection = store.create("Color & light");
         org.json.JSONArray samples = new org.json.JSONArray(new String(java.nio.file.Files.readAllBytes(new File(main.getFilesDir(), "style-demo.json").toPath()), java.nio.charset.StandardCharsets.UTF_8));
-        for (int i = samples.length() - 1; i >= 0; i--) { JSONObject sample = samples.getJSONObject(i); String id = store.add(collection, sample.getString("sourceUrl")); store.captured(id, new JSONObject().put("title", sample.getString("title")).put("mediaFile", sample.getString("mediaFile")).put("kind", "image").put("capture", "saved")); }
+        for (int i = samples.length() * 2 - 1; i >= 0; i--) { JSONObject sample = samples.getJSONObject(i % samples.length()); String id = store.add(collection, sample.getString("sourceUrl") + (i >= samples.length() ? "?grid-check=2" : "")); store.captured(id, new JSONObject().put("title", sample.getString("title")).put("mediaFile", sample.getString("mediaFile")).put("kind", "image").put("capture", "saved")); }
         onMain(() -> { try { Field selected = MainActivity.class.getDeclaredField("selectedLocal"); selected.setAccessible(true); selected.set(main, collection); Method refresh = MainActivity.class.getDeclaredMethod("refreshLocal"); refresh.setAccessible(true); refresh.invoke(main); } catch (Exception error) { throw new RuntimeException(error); } });
         await(() -> hasImage(main.getWindow().getDecorView()), 10000, "Artwork preview did not decode.");
         if (((View)field(main, "searchLayout")).isShown()) click(main, "Search");
@@ -267,7 +274,7 @@ public final class MobileFlowTest extends Instrumentation {
         relaunch(720, 1600, 1); require(collection.equals(field(main, "selectedLocal")) && grid().getSpanCount() == 3, "Chosen collection/preview size did not persist.");
         click(main, "Pocket"); await(() -> grid().getSpanCount() == 2, 5000, "Preview sizing changed an unrelated collection."); click(main, "Color & light"); await(() -> grid().getSpanCount() == 3, 5000, "Collection-specific sizing was lost.");
         resizeBoard(300, 1, "style-large.png"); resizeBoard(160, 2, "style-light.png");
-        onMain(() -> { try { grid().scrollToPositionWithOffset(4, 0); } catch (Exception error) { throw new RuntimeException(error); } });
+        onMain(() -> { try { RecyclerView board = (RecyclerView)field(main, "pinGrid"); board.scrollBy(0, board.getChildAt(0).getHeight() * 2); require(grid().findFirstVisibleItemPosition() >= 2, "Native board scroll did not move its visible cards."); } catch (Exception error) { throw new RuntimeException(error); } });
         await(() -> grid().findFirstVisibleItemPosition() >= 2, 5000, "Artwork board did not scroll."); int anchor = grid().findFirstVisibleItemPosition();
         resizeBoard(300, 1, null); require(grid().findFirstVisibleItemPosition() == anchor, "Resizing jumped away from the visible reference."); resizeBoard(160, 2, null);
         onMain(() -> { try { ((RecyclerView)field(main, "pinGrid")).scrollToPosition(0); } catch (Exception error) { throw new RuntimeException(error); } }); await(() -> grid().findFirstVisibleItemPosition() == 0, 5000, "Artwork board did not return to its first row.");
@@ -284,6 +291,7 @@ public final class MobileFlowTest extends Instrumentation {
         alignedBoard(); screenshot(main, "style-light.png");
         onMain(() -> { try { com.google.android.material.appbar.MaterialToolbar toolbar = (com.google.android.material.appbar.MaterialToolbar)field(main, "toolbar"); for (int action : new int[] {107, 108}) require(toolbar.getMenu().findItem(action).getIconTintList().getDefaultColor() == main.getColor(R.color.papan_on_surface_variant), "Toolbar icons kept a low-contrast tint after switching themes."); } catch (Exception error) { throw new RuntimeException(error); } });
         click(main, "Board appearance"); click(main, "Use phone setting"); await(() -> main.hasWindowFocus() && ((android.content.SharedPreferences)field(main, "appearance")).getInt("theme", 0) == -1, 10000, "System appearance did not persist.");
+        relaunch(720, 1600, 2); require(grid().getSpanCount() == 1, "Large captions did not reflow to one column."); await(() -> hasImage(main.getWindow().getDecorView()), 10000, "Large-text artwork did not decode."); alignedBoard(); screenshot(main, "style-large-text.png");
     }
     private boolean imageScale(View root, ImageView.ScaleType expected) { if (root instanceof ImageView && root.getTag() instanceof TextView && ((ImageView)root).getDrawable() instanceof android.graphics.drawable.BitmapDrawable) return ((ImageView)root).getScaleType() == expected; if (root instanceof ViewGroup) for (int i = 0; i < ((ViewGroup)root).getChildCount(); i++) if (imageScale(((ViewGroup)root).getChildAt(i), expected)) return true; return false; }
     private void resizeBoard(int target, int columns, String capture) throws Exception {
@@ -300,13 +308,30 @@ public final class MobileFlowTest extends Instrumentation {
             require(Math.abs(card.getHeight() - height) <= 1 && Math.abs(card.getWidth() - width) <= 1, "Mixed media/title cards have unequal frames.");
             Integer x = left.putIfAbsent(position % columns, card.getLeft()), y = top.putIfAbsent(position / columns, card.getTop());
             require((x == null || x == card.getLeft()) && (y == null || y == card.getTop()), "Card rows or columns are misaligned."); checked++;
+            previewCaption(card);
         }
         require(checked >= Math.min(columns, view.getAdapter().getItemCount()), "No full row was checked.");
     } catch (Exception error) { throw new RuntimeException(error); } }); }
+    private void previewCaption(View card) {
+        String label = card.getContentDescription().toString().substring("Open pin: ".length());
+        TextView title = captionText(card, label); require(title != null, "Full pin title is missing from the preview.");
+        ViewGroup caption = (ViewGroup)title.getParent(); require(caption.getChildCount() >= 2 && caption.getChildAt(1) instanceof TextView, "Pin source is missing from the caption.");
+        View preview = (View)((View)caption.getParent()).getParent();
+        require(Math.abs(card.getHeight() - preview.getHeight()) <= 2 && Math.abs(card.getWidth() - preview.getWidth()) <= 2 && Math.abs(preview.getWidth() - preview.getHeight()) <= 2, "Caption added height outside the square preview.");
+        int scrim = ((android.graphics.drawable.ColorDrawable)caption.getBackground()).getColor();
+        int brightest = androidx.core.graphics.ColorUtils.compositeColors(scrim, android.graphics.Color.WHITE);
+        int[] frame = new int[2]; preview.getLocationOnScreen(frame);
+        for (int i = 0; i < caption.getChildCount(); i++) { TextView text = (TextView)caption.getChildAt(i); int[] point = new int[2]; text.getLocationOnScreen(point);
+            require(text.isShown() && text.getLayout() != null && text.getLayout().getLineCount() >= 1 && text.getHeight() - text.getCompoundPaddingTop() - text.getCompoundPaddingBottom() >= text.getLayout().getHeight(), "Caption text clipped at the current font size.");
+            require(point[0] >= frame[0] && point[1] >= frame[1] && point[0] + text.getWidth() <= frame[0] + preview.getWidth() && point[1] + text.getHeight() <= frame[1] + preview.getHeight(), "Caption escaped the preview image.");
+            require(androidx.core.graphics.ColorUtils.calculateContrast(text.getCurrentTextColor(), brightest) >= 4.5, "Caption loses contrast over a white preview.");
+        }
+    }
+    private TextView captionText(View root, String value) { if (root instanceof TextView && value.contentEquals(((TextView)root).getText())) return (TextView)root; if (root instanceof ViewGroup) for (int i = 0; i < ((ViewGroup)root).getChildCount(); i++) { TextView found = captionText(((ViewGroup)root).getChildAt(i), value); if (found != null) return found; } return null; }
     private void responsive() throws Exception {
-        relaunch(600, 1400, 1); require(grid().getSpanCount() == 1, "Narrow phone did not use one column."); controlsFit(); screenshot(main, "narrow.png");
-        relaunch(1280, 1600, 1); require(grid().getSpanCount() == 3, "Tablet did not use three columns."); controlsFit(); await(() -> hasImage(main.getWindow().getDecorView()), 5000, "Tablet preview did not decode."); screenshot(main, "tablet.png");
-        relaunch(720, 1600, 2); require(main.getResources().getConfiguration().fontScale == 2 && grid().getSpanCount() == 1, "Large font layout did not reflow."); controlsFit(); screenshot(main, "large-text.png");
+        relaunch(600, 1400, 1); require(grid().getSpanCount() == 1, "Narrow phone did not use one column."); controlsFit(); alignedBoard(); screenshot(main, "narrow.png");
+        relaunch(1280, 1600, 1); require(grid().getSpanCount() == 3, "Tablet did not use three columns."); controlsFit(); await(() -> hasImage(main.getWindow().getDecorView()), 5000, "Tablet preview did not decode."); alignedBoard(); screenshot(main, "tablet.png");
+        relaunch(720, 1600, 2); require(main.getResources().getConfiguration().fontScale == 2 && grid().getSpanCount() == 1, "Large font layout did not reflow."); controlsFit(); alignedBoard(); screenshot(main, "large-text.png");
     }
     private void controlsFit() throws Exception { onMain(() -> { try {
         View root = (View)field(main, "root"), fab = (View)field(main, "addLink");
@@ -333,7 +358,7 @@ public final class MobileFlowTest extends Instrumentation {
         control("enable"); click(main, "Activity"); click(main, "Send pending / check saves");
         await(() -> PhoneStore.get(main).snapshot().getJSONArray("entries").length() == 0, 20000, "Chosen desktop collection did not save after restart."); click(main, "On phone");
         click(main, "Desktop"); await(() -> has("Android chosen"), 10000, "Desktop did not reconnect."); click(main, "Android chosen");
-        await(() -> ((org.json.JSONArray)field(main, "remotePins")).length() == 1 && hasImage(main.getWindow().getDecorView()), 10000, "Chosen desktop board did not decode saved media."); screenshot(main, "remote.png");
+        await(() -> ((org.json.JSONArray)field(main, "remotePins")).length() == 1 && hasImage(main.getWindow().getDecorView()), 10000, "Chosen desktop board did not decode saved media."); alignedBoard(); screenshot(main, "remote.png");
         input("Search this collection", "absent reference"); await(() -> text(main).contains("No matching pins."), 10000, "Desktop search did not filter on the server."); input("Search this collection", "wide"); await(() -> ((org.json.JSONArray)field(main, "remotePins")).length() == 1, 10000, "Desktop search did not find saved content."); input("Search this collection", ""); await(() -> has("Protected test · protected"), 10000, "Collection tabs did not settle after search.");
         click(main, "Many references"); await(() -> ((org.json.JSONArray)field(main, "remotePins")).length() == 40, 10000, "First desktop page did not load.");
         require("Fixture reference 84".equals(((org.json.JSONArray)field(main, "remotePins")).getJSONObject(0).optString("title")), "Desktop pins were not newest first.");

@@ -64,6 +64,24 @@ Reproduce the native run from the matching desktop checkout with `PAPAN_ANDROID_
 
 No personal installation or published release is claimed. Physical-phone/Wi-Fi/optical QR, Android 8 and screen-reader/physical soft-keyboard gaps remain. Native tests use temporary receiver collections and ADB reverse tunnels. No host Xvfb server or primary-monitor test window is used in this revision. [Design gate](mobile-design-checks.md), [Android task #2](https://github.com/chelij/papan-android/issues/2), [coordinator #5](https://github.com/chelij/papan/issues/5).
 
+## Pin preview captions
+
+The next 14 October 2026 revision, based on Android `0f8d648`, puts each title and source website inside the square preview. A 20dp bottom fade leads into a 70% black caption scrim; all glyphs sit below the fade on its constant-opacity portion. Titles use up to two lines, or one on previews below 140dp; details and accessibility retain the full title and source action. The source website stays visible during pending/failed capture. Existing video cards keep their labelled placeholder and native detail playback; this change does not add video thumbnails or autoplay. The receiver, storage formats, libraries, dependencies and theme settings are unchanged.
+
+The native Android 16/API 36 x86_64 run passes on verified virtual displays (recorded display **2**), including all prior local/remote, capture, video playback/deletion, paste/share, password/lock, offline/restart, paging/search/recycling, keyboard and three actual receiver-save checks. Cached-media/notes failure status and source visibility pass a focused native state check. New assertions verify that title/source bounds stay inside the preview, the card height equals its square preview height, and text layouts fit at small/medium/large sizes, 300dp/640dp and 200% fonts. Real artwork captions also pass at 200%. Eight existing credited artworks are reused in sixteen disposable references so the shorter cards still provide meaningful scroll space. Native scrolling followed by repeated size changes retains the visible reference. Light/Dark/System and whole-image/fill checks pass again. The final small, large, light, dark, enlarged-text, video and failed-preview captures were visually inspected.
+
+All **18** measured custom color pairs pass their AA thresholds, reusing sixteen unchanged theme pairs. Over the brightest possible image (pure white), the native scrim composites to `#4C4C4C`: white title contrast is **8.59:1**, pale source contrast **6.88:1**. The native test also checks the actual caption background/text colors against pure white. Normal/isolated builds verify v2/v3 signatures; all **23** common application classes match. All **18** application source/resource files plus the instrumentation source match the normal APK's source bundle; signing keys and seeded state are absent. Both source checks pass.
+
+| Caption preview/source | SHA-256 |
+| --- | --- |
+| `Papan-Android-overlay-preview.apk` / normal `Papan-Android-0.3.0.apk` | `4884955e31c606264f49faa96dfc4b526bfde97c3b9674392889d719886af036` |
+| `Papan-Android-0.3.0-test.apk` | `fde8fdf9f368d6853562de0b45ada2527de6e44fef7d219f6e1a894958cd819a` |
+| `MainActivity.java` | `49d49d44931e5e1d675f0fe83be9888e2a236f7ec92480694d0e4c87459770af` |
+
+These bytes supersede the notebook-caption preview at the same unreleased version. Evidence: desktop `artifacts/android/ui/report.json`, `instrumentation.txt`, `style-*.png`, `video-board.png`, `failed-board.png`; Android `artifacts/android/overlay-build-*.log`, `overlay-contrast.json`, `overlay-integrity.json`, `overlay-screenshots.json` and `overlay-cleanup.json`. The desktop provider SHA-256 remains `0fe6030dfbaf2ac3693859f34a7c5e09de2d10e126479fe2903625fa16faf811`; prior desktop unit/source/packaged evidence is reused. Its automated workflow at `f74a548` has completed successfully. No host Xvfb or main-monitor window was used; the disposable app, tunnels and emulator were removed/stopped and the desktop connection was verified.
+
+No personal installation or release publication is claimed. Physical-phone/Wi-Fi/optical QR, Android 8 and screen-reader/physical soft-keyboard checks remain. [Design gate](mobile-design-checks.md), [Android task #2](https://github.com/chelij/papan-android/issues/2), [coordinator #5](https://github.com/chelij/papan/issues/5).
+
 ## Limits
 
 No physical-phone performance, optical QR scan, Wi-Fi reachability, Android 8 run, iOS app, published release pair or personal installation is claimed. The emulator uses ADB reverse tunnels to temporary loopback services. The source-browser check intercepts the intent; it does not operate another browser. Keyboard focus/activation and responsive bounds were checked; a screen-reader session and physical soft-keyboard interaction remain device follow-up checks.
