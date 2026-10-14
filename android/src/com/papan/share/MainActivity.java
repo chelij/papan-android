@@ -372,16 +372,22 @@ public final class MainActivity extends AppCompatActivity {
         @Override public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
             if (!(holder instanceof CardHolder)) { Button more = (Button)holder.itemView; more.setText(loadingMore ? "Loading pins…" : "Load more pins"); more.setEnabled(!loadingMore); return; }
             CardHolder card = (CardHolder)holder; JSONObject pin = pins.get(position); card.body.removeAllViews(); card.itemView.setContentDescription("Open pin: " + pin.optString("title")); card.itemView.setOnClickListener(v -> openPin(pin, fromDesktop));
+            FrameLayout preview = new FrameLayout(MainActivity.this); preview.setBackgroundColor(getColor(R.color.papan_background)); card.body.addView(preview, new LinearLayout.LayoutParams(-1, dp(frameHeight)));
+            String notice = !fromDesktop && "pending".equals(pin.optString("capture")) ? "Preparing preview…" : !fromDesktop && "failed".equals(pin.optString("capture")) ? "Preview unavailable" : null;
             try {
                 JSONObject item = cover(pin, fromDesktop);
-                if (item != null && "image".equals(item.optString("kind"))) addImage(card.body, pin, item, fromDesktop, frameHeight, appearance.getBoolean("fill:" + boardPreferenceKey(), true));
-                else { String excerpt = item == null ? pin.optString("notes") : item.optString("text"); TextView kind = text(excerpt.isEmpty() ? item != null && "video".equals(item.optString("kind")) ? "Video" : "Saved link" : excerpt, 16); kind.setTextColor(MUTED); kind.setPadding(dp(14), dp(12), dp(14), dp(12)); kind.setGravity(Gravity.CENTER_VERTICAL); kind.setEllipsize(android.text.TextUtils.TruncateAt.END); kind.setMaxLines(Math.max(2, frameHeight / 26)); card.body.addView(kind, new LinearLayout.LayoutParams(-1, dp(frameHeight))); }
-                LinearLayout caption = column(); caption.setPadding(dp(12), dp(8), dp(12), dp(10)); card.body.addView(caption);
-                TextView title = text(pin.optString("title", pin.optString("sourceUrl")), 14); title.setTypeface(android.graphics.Typeface.create("sans-serif-medium", 0)); title.setMinLines(2); title.setMaxLines(2); title.setEllipsize(android.text.TextUtils.TruncateAt.END); caption.addView(title);
-                String host; try { host = new java.net.URI(pin.optString("sourceUrl")).getHost(); } catch (Exception ignored) { host = null; }
-                String detail = !fromDesktop && "pending".equals(pin.optString("capture")) ? "Preparing preview…" : !fromDesktop && "failed".equals(pin.optString("capture")) ? "Preview unavailable" : host == null ? "Saved reference" : host;
-                TextView source = text(detail, 12); source.setTextColor(MUTED); source.setMinLines(1); source.setMaxLines(1); source.setEllipsize(android.text.TextUtils.TruncateAt.END); caption.addView(source);
-            } catch (Exception error) { card.body.addView(text("Preview unavailable. Open this pin to retry.", 14)); }
+                if (item != null && "image".equals(item.optString("kind"))) preview.addView(imageFrame(pin, item, fromDesktop, appearance.getBoolean("fill:" + boardPreferenceKey(), true)), new FrameLayout.LayoutParams(-1, -1));
+                else if (notice == null) { String excerpt = item == null ? pin.optString("notes") : item.optString("text"); TextView kind = text(excerpt.isEmpty() ? item != null && "video".equals(item.optString("kind")) ? "Video" : "Saved link" : excerpt, 16); kind.setTextColor(MUTED); kind.setPadding(dp(12), dp(10), dp(12), 0); kind.setEllipsize(android.text.TextUtils.TruncateAt.END); kind.setMaxLines(1); preview.addView(kind, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP)); }
+            } catch (Exception error) { TextView failed = text("Preview unavailable", 14); failed.setPadding(dp(12), dp(10), dp(12), 0); preview.addView(failed); }
+            if (notice != null) { TextView state = text(notice, 12); state.setTextColor(MUTED); state.setBackgroundColor(getColor(R.color.papan_background)); state.setPadding(dp(10), dp(6), dp(10), dp(6)); state.setMaxLines(1); state.setEllipsize(android.text.TextUtils.TruncateAt.END); preview.addView(state, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP)); }
+            LinearLayout overlay = column(), caption = column();
+            View fade = new View(MainActivity.this); fade.setBackground(new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, new int[] {Color.TRANSPARENT, 0xB3000000})); overlay.addView(fade, new LinearLayout.LayoutParams(-1, dp(20)));
+            // All caption glyphs sit on the 70% black plateau, even over a white image.
+            caption.setBackgroundColor(0xB3000000); caption.setPadding(dp(10), dp(4), dp(10), dp(8)); overlay.addView(caption);
+            TextView title = text(pin.optString("title", pin.optString("sourceUrl")), 14); title.setTextColor(Color.WHITE); title.setTypeface(android.graphics.Typeface.create("sans-serif-medium", 0)); title.setMaxLines(frameHeight < 140 ? 1 : 2); title.setEllipsize(android.text.TextUtils.TruncateAt.END); caption.addView(title);
+            String host; try { host = new java.net.URI(pin.optString("sourceUrl")).getHost(); } catch (Exception ignored) { host = null; }
+            TextView source = text(host == null ? "Saved reference" : host, 12); source.setTextColor(0xFFE6E6E6); source.setMaxLines(1); source.setEllipsize(android.text.TextUtils.TruncateAt.END); caption.addView(source);
+            preview.addView(overlay, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
         }
         @Override public void onViewRecycled(RecyclerView.ViewHolder holder) { if (holder instanceof CardHolder) ((CardHolder)holder).body.removeAllViews(); }
     }
@@ -390,7 +396,10 @@ public final class MainActivity extends AppCompatActivity {
         CardHolder(MaterialCardView card, LinearLayout content) { super(card); body = content; }
     }
     private void addImage(LinearLayout body, JSONObject pin, JSONObject item, boolean fromDesktop, int height, boolean crop) {
-        FrameLayout frame = new FrameLayout(this); frame.setBackgroundColor(getColor(R.color.papan_background)); ImageView image = new ImageView(this); image.setScaleType(crop ? ImageView.ScaleType.CENTER_CROP : ImageView.ScaleType.FIT_CENTER); image.setContentDescription(pin.optString("title")); frame.addView(image, new FrameLayout.LayoutParams(-1, -1)); TextView loading = text("Loading preview…", 13); loading.setTextColor(MUTED); loading.setGravity(Gravity.CENTER); frame.addView(loading, new FrameLayout.LayoutParams(-1, -1)); image.setTag(loading); body.addView(frame, new LinearLayout.LayoutParams(-1, dp(height))); loadImage(image, pin, item, fromDesktop);
+        body.addView(imageFrame(pin, item, fromDesktop, crop), new LinearLayout.LayoutParams(-1, dp(height)));
+    }
+    private FrameLayout imageFrame(JSONObject pin, JSONObject item, boolean fromDesktop, boolean crop) {
+        FrameLayout frame = new FrameLayout(this); frame.setBackgroundColor(getColor(R.color.papan_background)); ImageView image = new ImageView(this); image.setScaleType(crop ? ImageView.ScaleType.CENTER_CROP : ImageView.ScaleType.FIT_CENTER); image.setContentDescription(pin.optString("title")); frame.addView(image, new FrameLayout.LayoutParams(-1, -1)); TextView loading = text("Loading preview…", 13); loading.setTextColor(MUTED); loading.setGravity(Gravity.CENTER); frame.addView(loading, new FrameLayout.LayoutParams(-1, -1)); image.setTag(loading); loadImage(image, pin, item, fromDesktop); return frame;
     }
     private JSONObject cover(JSONObject pin, boolean fromDesktop) throws Exception {
         if (!fromDesktop) return pin.has("mediaFile") ? new JSONObject().put("kind", pin.optString("kind", "image")) : null;

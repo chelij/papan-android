@@ -1,6 +1,6 @@
 # Papan for Android
 
-Keep reference collections on your phone, or browse and add to open collections in [Papan desktop](https://github.com/chelij/papan). The Android app combines soft notebook surfaces with standard Material 3 controls and Papan's aligned media board. Preview sizing is adjustable, and light/dark appearance follows your phone unless you choose otherwise. Phone collections work without pairing. Compact windows use bottom navigation; wider windows use a navigation rail. Desktop access pairs locally with a QR code; no cloud account is needed.
+Keep reference collections on your phone, or browse and add to open collections in [Papan desktop](https://github.com/chelij/papan). The Android app combines soft notebook surfaces with standard Material 3 controls and Papan's aligned media board. Titles and source websites sit inside each preview. Preview sizing is adjustable, and light/dark appearance follows your phone unless you choose otherwise. Phone collections work without pairing. Compact windows use bottom navigation; wider windows use a navigation rail. Desktop access pairs locally with a QR code; no cloud account is needed.
 
 This mobile-board update is unreleased; the latest published Android APK remains 0.2.0. Build this checkout for the features described below.
 
