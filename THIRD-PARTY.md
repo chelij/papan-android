@@ -5,6 +5,7 @@ Papan for Android is GPL-3.0-or-later. Its application source, resources, test s
 | Component | License | Use and source |
 | --- | --- | --- |
 | Material Components 1.13.0 | Apache-2.0 | Native Material 3 UI. [Exact source](https://github.com/material-components/material-components-android/tree/1.13.0). Its source JAR ships under `assets/third-party/`. |
+| Material Design icons | Apache-2.0 | Google's outlined phone, desktop, history, search, tune and add vectors, adapted from the [official sources](https://github.com/google/material-design-icons/tree/master/src) to Android vector resources in `android/res/drawable/`. |
 | AndroidX libraries | Apache-2.0 | AppCompat, activity, core, and Material's transitive Android support libraries. Exact versions and artifact checksums are in `android/gradle.lockfile` and `android/gradle/verification-metadata.xml`. [AndroidX source](https://android.googlesource.com/platform/frameworks/support/). Bundled library notices are retained by Android packaging. |
 | Kotlin standard library | Apache-2.0 | Material/AndroidX transitive runtime. Exact version/checksums are pinned with the other dependencies. [Source](https://github.com/JetBrains/kotlin). |
 | ZXing core 3.5.4 | Apache-2.0 | On-device QR decoding. [Exact source](https://github.com/zxing/zxing/tree/zxing-3.5.4). Its source JAR ships under `assets/third-party/`. |

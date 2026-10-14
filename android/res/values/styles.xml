@@ -1,5 +1,5 @@
 <resources>
-  <style name="PapanTheme" parent="Theme.Material3.Dark.NoActionBar">
+  <style name="PapanTheme" parent="Theme.Material3.DayNight.NoActionBar">
     <item name="colorPrimary">@color/papan_primary</item>
     <item name="colorOnPrimary">@color/papan_on_primary</item>
     <item name="colorPrimaryContainer">@color/papan_primary_container</item>
@@ -12,27 +12,33 @@
     <item name="colorOnSurface">@color/papan_on_surface</item>
     <item name="colorSurfaceVariant">@color/papan_surface_variant</item>
     <item name="colorOnSurfaceVariant">@color/papan_on_surface_variant</item>
+    <item name="colorControlNormal">@color/papan_on_surface_variant</item>
     <item name="colorOutline">@color/papan_outline</item>
     <item name="colorOutlineVariant">@color/papan_surface_variant</item>
-    <item name="colorSurfaceDim">#101410</item>
-    <item name="colorSurfaceBright">#363b33</item>
-    <item name="colorSurfaceContainerLowest">#0b0f0a</item>
-    <item name="colorSurfaceContainerLow">#171c16</item>
-    <item name="colorSurfaceContainer">#1b201a</item>
-    <item name="colorSurfaceContainerHigh">#252b23</item>
-    <item name="colorSurfaceContainerHighest">#30362d</item>
-    <item name="colorSurfaceInverse">#e0e4da</item>
-    <item name="colorOnSurfaceInverse">#2d3229</item>
-    <item name="colorPrimaryInverse">#4e663e</item>
+    <item name="colorSurfaceDim">@color/papan_background</item>
+    <item name="colorSurfaceBright">@color/papan_surface</item>
+    <item name="colorSurfaceContainerLowest">@color/papan_surface</item>
+    <item name="colorSurfaceContainerLow">@color/papan_surface</item>
+    <item name="colorSurfaceContainer">@color/papan_background</item>
+    <item name="colorSurfaceContainerHigh">@color/papan_surface</item>
+    <item name="colorSurfaceContainerHighest">@color/papan_surface_variant</item>
+    <item name="colorSurfaceInverse">@color/papan_inverse</item>
+    <item name="colorOnSurfaceInverse">@color/papan_on_inverse</item>
+    <item name="colorPrimaryInverse">@color/papan_primary</item>
     <item name="actionMenuTextAppearance">@style/PapanMenuText</item>
     <item name="android:colorBackground">@color/papan_background</item>
-    <item name="android:windowBackground">#000000</item>
-    <item name="android:statusBarColor">#000000</item>
-    <item name="android:navigationBarColor">#000000</item>
-    <item name="android:windowLightStatusBar">false</item>
-    <item name="android:windowLightNavigationBar">false</item>
+    <item name="android:windowBackground">@color/papan_background</item>
+    <item name="android:statusBarColor">@color/papan_background</item>
+    <item name="android:navigationBarColor">@color/papan_background</item>
+    <item name="android:windowLightStatusBar">@bool/papan_light_bars</item>
+    <item name="android:windowLightNavigationBar">@bool/papan_light_bars</item>
   </style>
   <style name="PapanMenuText" parent="TextAppearance.Material3.LabelLarge"><item name="android:textAllCaps">false</item></style>
+  <style name="PapanBrand" parent="TextAppearance.Material3.TitleLarge">
+    <item name="android:textSize">23sp</item>
+    <item name="android:fontFamily">sans-serif-medium</item>
+    <item name="android:letterSpacing">-0.03</item>
+  </style>
   <style name="PapanTextButtonOverlay" parent="">
     <item name="materialButtonStyle">@style/Widget.Material3.Button.TextButton</item>
   </style>

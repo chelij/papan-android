@@ -44,6 +44,26 @@ Then run the paired desktop checkout's `test:android-ui` as described in the [RE
 
 The desktop package's provider bytes match the checked source. APK checksums refer to the local signed artifacts; rebuilding may produce a different archive hash. [Design and accessibility gate](mobile-design-checks.md), [coordinator](https://github.com/chelij/papan/issues/5), [Android task](https://github.com/chelij/papan-android/issues/2).
 
+## Notebook style and aligned sizing
+
+The subsequent 14 October 2026 revision, based on Android `5cd0c87`, implements the user's reference app design with aligned rows/columns and adjustable preview sizing. It keeps Material Components 1.13.0 and all existing storage, capture, delivery and receiver contracts. The checked desktop provider remains `6de1daa` with `src/phone-library.js` SHA-256 `0fe6030dfbaf2ac3693859f34a7c5e09de2d10e126479fe2903625fa16faf811`; only its Android test harness/documentation change for this revision.
+
+Normal and isolated Android 0.3.0/version-code-4 APKs build and verify v2/v3 signatures with JDK 21, SDK/build-tools 35/35.0.0 and the existing signing key. All **23** common compiled application classes are byte-identical between variants. All **18** current application source/resource files match the normal APK's source bundle. Signing keys and seeded artwork/library data are absent. These preview bytes supersede the earlier black/green preview at the same unreleased version.
+
+The final native run passes on Android 16/API 36 x86_64, using verified virtual display **26** inside a headless, read-only emulator. The existing collection/capture/video/paste/share/pairing/receipt/offline/search/pagination/password/lock flows repeat successfully, including three actual receiver saves. New checks use eight real, already-cached public-domain artworks from the desktop [credited catalog](https://github.com/chelij/papan/blob/main/docs/demo/credits.md), with varied image proportions and long titles. Native card bounds have equal heights/widths and aligned row/column edges at small, medium and large preview settings (three/two/one columns at 360dp). Real slider keyboard input changes the grid, a non-default size survives fresh Activity initialization, another collection retains its own size, and rapid size changes retain the visible reference. Fill/whole-image settings update actual ImageViews. Light/Dark/System controls work; a fresh dark pairing screen inherits the selected theme. Toolbar icon tints stay readable after switching back to light mode.
+
+The unchanged responsive checks pass at 300dp, 640dp and 200% fonts, with native navigation/FAB bounds, 48dp touch targets and keyboard activation/dismissal. All **16** measured custom text/control color pairs meet their AA thresholds in both themes: text ratios **5.56–14.83:1**, control outline ratios **4.28/5.20:1**. A physical screen-reader/soft-keyboard session remains untested. Visual inspection of the final native light, dark, size-panel, compact and enlarged captures complements the geometry checks; the user's aesthetic judgment remains separate from this implementation evidence.
+
+| Updated preview/source | SHA-256 |
+| --- | --- |
+| `Papan-Android-notebook-preview.apk` / normal `Papan-Android-0.3.0.apk` | `6a43be13f7bfaf0ffd9f67af2322c537b37171b75c3fd0aa4285a79847de4f1c` |
+| `Papan-Android-0.3.0-test.apk` | `df516a4893ed4800339cba8d903d7f2e247321cb505c3f7dde9a79e924131ced` |
+| `MainActivity.java` | `ecf0ef040c6463fd29f1f57572e8618abfd9e129aa132c2aedb535a6bd587c56` |
+
+Reproduce the native run from the matching desktop checkout with `PAPAN_ANDROID_DEMO_ROOT=/path/to/papan` in addition to the README's Android directory, ADB and serial settings. Evidence there is `artifacts/android/ui/report.json`, `instrumentation.txt`, `style-light.png`, `style-dark.png`, `style-small.png`, `style-large.png` and `style-appearance.png`. Android build/signature logs, measured colors and source/class integrity are in `artifacts/android/redesign-*`. Both source checks pass. Previously recorded 65-unit/source/package desktop-provider evidence is reused because the provider bytes are unchanged.
+
+No personal installation or published release is claimed. Physical-phone/Wi-Fi/optical QR, Android 8 and screen-reader/physical soft-keyboard gaps remain. Native tests use temporary receiver collections and ADB reverse tunnels. No host Xvfb server or primary-monitor test window is used in this revision. [Design gate](mobile-design-checks.md), [Android task #2](https://github.com/chelij/papan-android/issues/2), [coordinator #5](https://github.com/chelij/papan/issues/5).
+
 ## Limits
 
 No physical-phone performance, optical QR scan, Wi-Fi reachability, Android 8 run, iOS app, published release pair or personal installation is claimed. The emulator uses ADB reverse tunnels to temporary loopback services. The source-browser check intercepts the intent; it does not operate another browser. Keyboard focus/activation and responsive bounds were checked; a screen-reader session and physical soft-keyboard interaction remain device follow-up checks.

@@ -1,6 +1,6 @@
 # Mobile design delivery gate
 
-**PASS, 14 October 2026.** Direction: the user's desktop Papan reference and explicit choice of standard Android Material design. ENERGY **1**, RHYTHM **2**, MOTION **1**. [Implementation direction](mobile-design.md) and [native evidence/limits](verification.md).
+**PASS, 14 October 2026.** Direction: the user's explicit reference app design, adjustable sizing, aligned rows/columns like desktop Papan, and standard Android Material behavior. ENERGY **1**, RHYTHM **1**, MOTION **1**. [Implementation direction](mobile-design.md) and [native evidence/limits](verification.md#notebook-style-and-aligned-sizing).
 
 This report covers the changed mobile interface. Native Material components provide the platform interaction patterns; Papan supplies its identity and content. A physical screen-reader/soft-keyboard session is still a device follow-up, not a claimed result.
 
@@ -9,7 +9,7 @@ This report covers the changed mobile interface. Native Material components prov
 | R-01 | PASS: no decorative gradients or glows. |
 | R-02 | PASS: changed UI copy contains no em dashes. |
 | R-03 | PASS: native 300dp/640dp/200% layouts reflow; navigation/FAB bounds and 48dp targets are asserted. |
-| R-04 | PASS: existing Android gallery, slideshow, history, add and lock symbols identify phone boards, desktop boards, delivery history, adding and protection. |
+| R-04 | PASS: official outlined Material phone, desktop, history, search, tune and add vectors identify their implemented actions; the lock symbol denotes actual protection. |
 | R-05 | PASS: app bar, tabs, media board, sheets and details serve distinct navigation/content levels. No marketing template. |
 | R-06 | PASS: native scalable sans-serif follows Android guidance and desktop's sans-serif identity. |
 | R-07 | PASS: no decorative background grid or pattern. |
@@ -25,33 +25,33 @@ This report covers the changed mobile interface. Native Material components prov
 | R-17 | PASS: no invented statistics; documented bounds and test counts come from source/test output. |
 | R-18 | PASS: no testimonials or fictional people. |
 | R-19 | PASS: standard Material interaction motion only; no decorative entrance/loop animations. |
-| R-20 | PASS: Papan's black canvas, pale green accent, wordmark, collection tabs and media board retain its identity. |
-| R-21 | PASS: the dark canvas follows the user's desktop-parity requirement. No theme toggle is promised. |
+| R-20 | PASS: the accepted notebook surfaces, restrained terracotta action color, Papan wordmark, collection strip and aligned board form a consistent identity. |
+| R-21 | PASS: working Use phone setting/Light/Dark controls persist the choice and recreate the native Activity. |
 | R-22 | PASS: no generated illustrations. |
-| R-23 | PASS: the user chose the reference and native Material direction; existing app/platform assets are reused. No new identity imagery. |
+| R-23 | PASS: the user chose the reference app design with Papan alignment and sizing. Existing Papan identity, licensed Material vectors and credited public-domain artwork fixtures are used; no identity imagery is generated. |
 | R-24 | PASS: On phone, Desktop and Activity are implemented destinations. Collection tabs select real collections. |
-| R-25 | PASS: computed custom text pairs range from 5.56:1 to 17.75:1; field/card focus outlines are 6.67:1/14.29:1. Text sits on solid surfaces. |
+| R-25 | PASS: all 16 measured text/control color pairs meet their AA thresholds in light/dark modes. Toolbar icon tints are explicitly refreshed after theme changes. Text sits on solid surfaces; native field/card focus states remain visible. |
 | R-26 | PASS: native flows exercise navigation, collection CRUD, paste/add/share, editing, source intent, retry/delete, pairing/address recovery and delivery controls. Shared password/delivery handlers use actual HTTP and durable state. |
 | R-27 | PASS: empty boards, connecting/loading previews, offline recovery, field validation and failed-preview/retry states are visible. |
 | R-28 | PASS: no generic FAQ. |
-| R-29 | PASS: a Material color scheme uses Papan's dark neutral surfaces and pale green action accent. |
-| R-30 | PASS: the reference is Papan, using the requested Android platform components. |
+| R-29 | PASS: neutral notebook surfaces and one terracotta action accent define light/dark palettes; muted secondary navigation supports selection. |
+| R-30 | PASS: reference app inspiration is explicitly requested, with Papan's wordmark, aligned board, local/desktop navigation and sizing rather than a copied product. |
 | R-31 | PASS: component purposes, spacing, typography, color and responsive behavior are documented in the design note. |
 | R-32 | PASS: native Tab/Enter activation and Android Back dismissal pass on the verified virtual display. Cards have a focused outline; Material controls retain their native focus/press feedback. |
 | R-33 | PASS: Java/XML directly implement the interface; the build compiles that source without UI rewriting scripts. |
-| R-34 | PASS: the shipped dark theme is exercised; no second theme is advertised. |
+| R-34 | PASS: Light/Dark/System controls, fresh theme initialization, restored selected collection/size, and readable toolbar icons pass native checks. |
 | R-35 | PASS: signed builds, fresh native initialization, recorded control flows, screenshots, decoded media and actual provider saves pass. Source and packaged desktop checks also pass. |
 | R-36 | PASS: trusted-LAN HTTP and capture limits are disclosed. No certification or performance claims. |
-| R-37 | PASS: desktop identity and the user's explicit Material choice define the direction. |
-| R-38 | PASS: release APKs contain no seeded demonstration library. Procedural fixture media belongs only to disposable tests. |
-| Liveliness: dials | PASS: 1/2/1 is explicit; quiet work surfaces, varied content/detail/form layouts and native interaction motion match it. |
+| R-37 | PASS: the accepted reference app design, adjustable sizing, desktop alignment and native Android behavior define the direction. |
+| R-38 | PASS: normal APKs contain no seeded library or artwork. The optional native artwork check uses the existing credited desktop cache only in the disposable test package. |
+| Liveliness: dials | PASS: 1/1/1 is explicit; quiet work surfaces, regular cards and native interaction motion match it. |
 | Liveliness: focal point | PASS: the media board is the primary content; sheets/forms focus on choosing a destination or completing one action. |
-| Liveliness: spacing | PASS: app bar, tabs, search and reserved floating-action space establish hierarchy; system insets remain outside content. |
-| Liveliness: accent/motif | PASS: pale green marks actions/selection; Papan's black canvas, wordmark and repeated collection/media structure supply the motif. |
-| C-1 | PASS: native guidance and desktop identity explain the visual choices. |
+| Liveliness: spacing | PASS: compact app bar, collection tabs, optional search, equal gutters and reserved floating-action space establish hierarchy; system insets remain outside content. |
+| Liveliness: accent/motif | PASS: terracotta marks actions/selection; Papan's wordmark, collection strip and repeated aligned media/caption frames supply the motif. |
+| C-1 | PASS: the accepted visual reference, native guidance and desktop grid explain the documented choices. |
 | C-2 | PASS: every action family connects to implemented storage, navigation, media or receiver behavior. |
 | C-3 | PASS: each view supports collections, references, connections or pending delivery. |
-| C-4 | PASS: tested narrow/tablet/large-text/offline/error/locked states remain usable. RecyclerView limits attached cards and retains position. |
+| C-4 | PASS: narrow/tablet/large-text/offline/error/locked states remain usable. Native mixed-proportion/long-title cards have equal bounds at three sizes; repeated resizing retains the visible reference. Sizing persists per collection and off-screen cards recycle. |
 | C-5 | PASS: verification distinguishes emulator/loopback evidence from remaining physical-device, optical and Wi-Fi checks. |
 
-The native artifacts include local/remote boards and narrow/tablet/large-text captures. `artifacts/android/contrast.json` contains the computed color pairs. [Verification](verification.md) records exact preview hashes, commands and untested combinations.
+The native artifacts include decoded artwork boards at three sizes, light/dark modes, the size panel, local/remote boards and narrow/tablet/large-text captures. `artifacts/android/redesign-contrast.json` contains the measured color pairs. [Verification](verification.md#notebook-style-and-aligned-sizing) records the exact preview bytes, commands and untested combinations. This gate verifies implementation and access; aesthetic acceptance remains the user's judgment.
