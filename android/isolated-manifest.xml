@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+  <application android:label="Papan UI Test" tools:replace="android:label">
+    <activity android:name="com.papan.share.MainActivity"><intent-filter tools:node="removeAll" /></activity>
+  </application>
+  <instrumentation android:name="com.papan.share.MobileFlowTest" android:targetPackage="com.papan.share.test" />
+</manifest>

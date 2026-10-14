@@ -32,11 +32,18 @@ public final class PhoneStore {
         catch (Exception error) { file.failWrite(stream); throw error; }
     }
     public synchronized String enqueue(String url) throws Exception {
+        return enqueue(url, "", "Desktop default");
+    }
+    public synchronized String enqueue(String url, String collectionId, String collectionName) throws Exception {
+        if (!LocalCapture.webLink(url).equals(url)) throw new Exception("Use a complete web link.");
         JSONObject next = snapshot(); JSONArray entries = next.getJSONArray("entries");
-        for (int i = 0; i < entries.length(); i++) if (entries.getJSONObject(i).getString("url").equals(url)) return entries.getJSONObject(i).getString("id");
+        if (!collectionId.isEmpty() && !collectionId.matches("[a-fA-F0-9-]{36}")) throw new Exception("Choose a collection.");
+        for (int i = 0; i < entries.length(); i++) if (entries.getJSONObject(i).getString("url").equals(url) && entries.getJSONObject(i).optString("collectionId").equals(collectionId)) return entries.getJSONObject(i).getString("id");
         if (entries.length() >= 100) throw new Exception("Phone queue is full. Deliver or dismiss existing links first.");
         String id = UUID.randomUUID().toString();
-        entries.put(new JSONObject().put("id", id).put("url", url).put("received", false).put("status", "queued on phone"));
+        JSONObject entry = new JSONObject().put("id", id).put("url", url).put("received", false).put("status", "queued on phone").put("collectionName", collectionName);
+        if (!collectionId.isEmpty()) entry.put("collectionId", collectionId);
+        entries.put(entry);
         commit(next); return id;
     }
     public synchronized void pair(JSONObject config) throws Exception {

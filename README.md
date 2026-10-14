@@ -1,19 +1,24 @@
 # Papan for Android
 
-Share or paste a link on your phone and save it into a collection in [Papan desktop](https://github.com/chelij/papan). Pair locally with a QR code; the desktop extracts and saves the media. No cloud account or app-store credentials are needed.
+Keep reference collections on your phone, or browse and add to open collections in [Papan desktop](https://github.com/chelij/papan). The Android app uses standard Material 3 controls around Papan's black canvas, collection tabs and media board. Phone collections work without pairing. Compact windows use bottom navigation; wider windows use a navigation rail. Desktop access pairs locally with a QR code; no cloud account is needed.
 
-[Download the APK](https://github.com/chelij/papan-android/releases/latest) · [Desktop downloads](https://github.com/chelij/papan/releases/latest) · [Local sharing protocol and troubleshooting](https://github.com/chelij/papan/blob/main/docs/mobile-sharing.md) · [Ecosystem and compatibility](https://github.com/chelij/papan/blob/main/docs/ecosystem.md)
+This mobile-board update is unreleased; the latest published Android APK remains 0.2.0. Build this checkout for the features described below.
+
+[Download the published APK](https://github.com/chelij/papan-android/releases/latest) · [Desktop downloads](https://github.com/chelij/papan/releases/latest) · [Local sharing protocol and troubleshooting](https://github.com/chelij/papan/blob/main/docs/mobile-sharing.md) · [Ecosystem and compatibility](https://github.com/chelij/papan/blob/main/docs/ecosystem.md)
 
 ## Use it
 
-1. Install the APK from Releases. Android 8+ is supported. Use **Papan desktop 0.2.1 or newer**, and connect both devices to a reachable local network.
-2. On the desktop, open **Receive from phone**, enable the receiver, select a destination collection, and save the settings. Allow its chosen TCP port through the desktop firewall; the default is 47778.
-3. Choose **Pair a phone** on the desktop. In the Android companion, tap **Pair desktop**, allow camera access, and scan the desktop QR. It pairs automatically. **Paste pairing link instead** works without a camera.
-4. Share a link from another app to **Papan**, or copy a link and tap **Paste link**. That single button reads the current clipboard and queues/delivers its first web URL immediately.
+1. Install the APK. Android 8+ is supported. In **On phone**, open the toolbar menu and choose **New collection**. The same menu renames or deletes a phone collection.
+2. Tap **Paste link**, **Add link**, or share a link from another app to **Papan**. Choose its collection in the destination sheet. Choosing a phone collection saves the link immediately, then fetches its preview. Open a pin to view media, edit its title/notes, save to another collection, open its source, retry a failed preview or delete it. Search filters the current collection.
+3. For desktop access, connect both devices to a reachable trusted local network. In desktop **Receive from phone**, enable the receiver and **allow paired phones to browse and add to open collections**, choose the default destination/address, and save. The default TCP port is 47778. Browsing needs the matching unreleased desktop mobile-board patch; desktop 0.2.1+ still supports legacy default delivery.
+4. Choose **Pair a phone** on desktop. In Android **Connections**, tap **Pair desktop**, allow camera access and scan the QR. **Paste pairing link instead** and **Pair from link** work without a camera.
+5. Switch to **Desktop** to browse currently open collections. Protected collections ask for their password on this phone, even if desktop already unlocked them. The paste/share picker also lists desktop collections. The desktop extracts and saves remote links into the chosen collection.
 
-Undelivered links remain in the phone's private queue. Reopen Papan or tap **Send pending / check saves** to retry immediately; Android may defer scheduled background retries. Completed saves are removed from the phone queue after the desktop acknowledges them. Repeated taps do not duplicate a pending URL.
+Phone capture saves ordinary HTML titles/Open Graph thumbnails and direct JPEG/PNG/WebP/GIF images or MP4/WebM videos up to 32 MiB. Previews are cached privately for offline use. It does not run desktop's site-specific extractors or page JavaScript; a failed preview keeps the link and offers retry. Phone and desktop libraries are separate, with no automatic synchronization or desktop `.papan` import/export in this version. Phone collections have no collection-password feature.
 
-**Connection settings** contains pairing and desktop address recovery. Update the address there if the desktop's local IP changes; this keeps the key and pending links. Replacing a pairing is blocked while pending links exist.
+Undelivered desktop links remain in the phone's private queue, with their chosen collection ID. Reopen Papan or use **Activity → Send pending / check saves** to retry; Android may defer background retries. Completed saves leave the queue after desktop acknowledgment. Repeating a link for the same destination does not duplicate it; different collections can each keep the link. Offline or older desktops offer an explicitly labelled default-delivery choice. An unavailable selected collection never silently falls back to the default.
+
+**Connections** contains pairing and desktop address recovery. Updating the address keeps the key, pending links and selected destinations. Replacing a pairing is blocked while pending links exist. Protected remote access expires after 15 minutes and is cleared on backgrounding, desktop lock/close, revocation or restart. Remote previews remain in memory, with no disk cache. The phone checks desktop access while viewing, including open details.
 
 Camera frames are decoded locally and never saved or uploaded. Clipboard access happens only when you tap Paste. Sharing uses ordinary HTTP on a trusted local network; the phone stores its key and queue in app-private files with Android backup disabled. [Detailed transport and collection-protection limits](https://github.com/chelij/papan/blob/main/docs/mobile-sharing.md#privacy-and-protection).
 
@@ -28,7 +33,7 @@ npm run check
 npm run build:android
 ```
 
-No npm runtime dependencies or Gradle installation are needed. The script fetches checksum-pinned ZXing core 3.5.4. The signed APK and SHA-256 file appear in `dist/`; source and dependency licenses are also embedded in the APK.
+No npm runtime dependencies or system Gradle installation are needed. The wrapper downloads checksum-pinned Gradle 8.13. Android Gradle Plugin 8.9.3, Material Components 1.13.0, AndroidX and ZXing core 3.5.4 are pinned in Gradle dependency locks and checked against committed SHA-256 verification metadata. The signed APK and SHA-256 file appear in `dist/`; source and dependency licenses are also embedded in the APK.
 
 The first local build creates `artifacts/android/papan-local.keystore`. Keep it private and preserve it for updates. Another build key can be supplied using `PAPAN_ANDROID_KEYSTORE`, `PAPAN_ANDROID_KEY_ALIAS`, and `PAPAN_ANDROID_KEY_PASSWORD`. Official releases use the existing maintainer key; a locally generated key cannot update an installation signed by another key. Neither signing keys nor passwords are uploaded to this repository. CI compiles and verifies a disposable-key APK; only maintainer-signed release assets are distributed.
 
@@ -46,9 +51,11 @@ Then, from a [Papan desktop checkout](https://github.com/chelij/papan) with its 
 PAPAN_ANDROID_DIR=/path/to/papan-android PAPAN_ADB=/path/to/adb npm run test:android-ui
 ```
 
-Unlock the USB-debugging phone first. Optional `PAPAN_ANDROID_SERIAL` selects a device. The check installs only `com.papan.share.test`, verifies its virtual display before operating the UI, and uses a disposable desktop collection and temporary USB reverse tunnel. It checks clipboard paste/deduplication, live Camera2 frames, QR decoding at four rotations, pairing, real media saving, and saved-status updates. It preserves a readable clipboard value and removes its test app/tunnel afterward. `PAPAN_ANDROID_CAMERA_ONLY=1` skips clipboard checks when the phone is locked.
+Unlock the USB-debugging phone first. Optional `PAPAN_ANDROID_SERIAL` selects a device. The check installs only `com.papan.share.test`, verifies its virtual display before operating the UI, and uses a disposable desktop collection and temporary USB reverse tunnel. It checks native Material navigation, clipboard paste/deduplication, standalone collections and cached media, live Camera2 frames, QR decoding at four rotations, pairing, selected-destination saves and saved-status updates. Desktop pagination/search, protected access, offline restart/retry, video playback/deletion and narrow/tablet/200% text layouts are covered by the same run. It preserves a readable clipboard value and removes its test app/tunnel afterward. `PAPAN_ANDROID_CAMERA_ONLY=1` skips clipboard checks when the phone is locked.
 
-These checks passed on a Samsung SM-S916B running Android 16. Live camera frames and QR fixtures were verified separately; optical scanning of a desktop screen and Wi-Fi reachability are not established by the USB test. iPhone preparation remains in the desktop protocol guide; this repository builds Android only.
+The unreleased 0.3.0 development pair was checked on 14 October 2026 using an isolated Android 16/API 36 x86_64 emulator and virtual display, against desktop source based on `beec3da`. Native checks cover local collection creation, cached images and actual video playback/deletion, pin edit/search, durable private storage, destination selection while desktop is offline, restart/retry without destination changes, protected cancel/wrong/correct passwords, an actual protected save and clearing contents after desktop lock. An 85-pin collection checks pagination, search beyond loaded pages, card recycling and position retention. Narrow phone, tablet, 200% font and keyboard layouts are also checked. Build tools are 35.0.0/JDK 21. See [verification](docs/verification.md) for exact evidence and limits.
+
+Earlier Android 0.2.0 camera/QR/delivery checks passed on Samsung SM-S916B / Android 16. Live camera frames and rotated QR fixtures are separate from optical scanning. The current emulator checks do not establish physical-phone performance, optical scanning, Wi-Fi reachability, Android 8 behavior or a published desktop/APK pair. iPhone preparation remains in the desktop protocol guide; this repository builds Android only.
 
 ## License
 

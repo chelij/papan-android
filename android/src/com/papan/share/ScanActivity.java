@@ -1,7 +1,13 @@
 package com.papan.share;
 
 import android.Manifest;
-import android.app.Activity;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.view.ContextThemeWrapper;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import com.google.android.material.button.MaterialButton;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
@@ -42,7 +48,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public final class ScanActivity extends Activity {
+public final class ScanActivity extends AppCompatActivity {
     private TextureView preview;
     private TextView status;
     private HandlerThread thread;
@@ -66,19 +72,20 @@ public final class ScanActivity extends Activity {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL);
         int padding = Math.round(20 * getResources().getDisplayMetrics().density);
         body.setPadding(padding, padding, padding, padding); setContentView(body);
-        body.setOnApplyWindowInsetsListener((view, insets) -> { view.setPadding(padding + insets.getSystemWindowInsetLeft(), padding + insets.getSystemWindowInsetTop(), padding + insets.getSystemWindowInsetRight(), padding + insets.getSystemWindowInsetBottom()); return insets; });
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        ViewCompat.setOnApplyWindowInsetsListener(body, (view, insets) -> { Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()); view.setPadding(padding + bars.left, padding + bars.top, padding + bars.right, padding + bars.bottom); return WindowInsetsCompat.CONSUMED; });
         TextView title = new TextView(this); title.setText("Pair your desktop"); title.setTextSize(25); body.addView(title);
         TextView hint = new TextView(this); hint.setText("Point the camera at the QR in Papan’s Receive from phone window."); hint.setTextSize(15); hint.setPadding(0, padding / 2, 0, padding); body.addView(hint);
         preview = new TextureView(this); preview.setContentDescription("Pairing QR camera preview");
         body.addView(preview, new LinearLayout.LayoutParams(-1, 0, 1));
         status = new TextView(this); status.setTextSize(14); status.setPadding(0, padding / 2, 0, padding / 2); status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE); body.addView(status);
-        Button paste = new Button(this); paste.setText("Paste pairing link instead"); paste.setAllCaps(false);
+        Button paste = new MaterialButton(this); paste.setText("Paste pairing link instead"); paste.setAllCaps(false);
         paste.setOnClickListener(view -> {
             ClipData clip = ((ClipboardManager) getSystemService(CLIPBOARD_SERVICE)).getPrimaryClip();
             if (clip == null || clip.getItemCount() == 0 || clip.getItemAt(0).getText() == null) status.setText("Copy the complete pairing link from Papan first.");
             else complete(clip.getItemAt(0).getText().toString());
         }); body.addView(paste);
-        Button cancel = new Button(this); cancel.setText("Cancel"); cancel.setAllCaps(false); cancel.setOnClickListener(view -> finish()); body.addView(cancel);
+        Button cancel = new MaterialButton(new ContextThemeWrapper(this, R.style.PapanTextButtonOverlay)); cancel.setText("Cancel"); cancel.setAllCaps(false); cancel.setOnClickListener(view -> finish()); body.addView(cancel);
         preview.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) { openCamera(); }
             @Override public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) { transformPreview(); }

@@ -1,0 +1,16 @@
+<resources>
+  <color name="papan_primary">#D0F5AD</color>
+  <color name="papan_on_primary">#14200F</color>
+  <color name="papan_primary_container">#34452A</color>
+  <color name="papan_on_primary_container">#D0F5AD</color>
+  <color name="papan_secondary">#BBCBB0</color>
+  <color name="papan_on_secondary">#25351C</color>
+  <color name="papan_secondary_container">#3B4C32</color>
+  <color name="papan_on_secondary_container">#D8E7CC</color>
+  <color name="papan_surface">#101410</color>
+  <color name="papan_on_surface">#ECECEA</color>
+  <color name="papan_surface_variant">#41483E</color>
+  <color name="papan_on_surface_variant">#C1C9BC</color>
+  <color name="papan_outline">#8B9485</color>
+  <color name="papan_background">#000000</color>
+</resources>

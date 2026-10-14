@@ -15,6 +15,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class Delivery {
+    public static final class RequestException extends Exception {
+        public final int status;
+        RequestException(int status, String message) { super(message); this.status = status; }
+    }
     private static final AtomicBoolean syncing = new AtomicBoolean(false);
     public static String endpoint(String value) throws Exception {
         URI uri = new URI(value.trim()); String host = uri.getHost();
@@ -56,10 +60,10 @@ public final class Delivery {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (InputStream stream = input) {
                 byte[] buffer = new byte[4096]; int length;
-                while ((length = stream.read(buffer)) != -1) { if (bytes.size() + length > 32768) throw new Exception("Desktop response is too large."); bytes.write(buffer, 0, length); }
+                while ((length = stream.read(buffer)) != -1) { if (bytes.size() + length > 2 * 1024 * 1024) throw new Exception("Desktop response is too large."); bytes.write(buffer, 0, length); }
             }
             JSONObject result = new JSONObject(new String(bytes.toByteArray(), StandardCharsets.UTF_8));
-            if (status < 200 || status >= 300) throw new Exception(result.optString("error", "Desktop returned HTTP " + status + "."));
+            if (status < 200 || status >= 300) throw new RequestException(status, result.optString("error", "Desktop returned HTTP " + status + "."));
             return result;
         } catch (java.io.IOException error) { throw new Exception("Desktop unavailable. Check Papan, Wi-Fi, and the desktop firewall.", error); }
         finally { connection.disconnect(); }
@@ -78,8 +82,10 @@ public final class Delivery {
             for (int i = 0; i < entries.length() && !cancelled.get(); i++) {
                 JSONObject entry = entries.getJSONObject(i); String id = entry.getString("id"); boolean received = entry.optBoolean("received");
                 try {
+                    JSONObject payload = new JSONObject().put("id", id).put("url", entry.getString("url"));
+                    if (entry.has("collectionId")) payload.put("collectionId", entry.getString("collectionId"));
                     JSONObject receipt = request(endpoint, received ? "/v1/shares/" + id : "/v1/shares", token,
-                        received ? null : new JSONObject().put("id", id).put("url", entry.getString("url")));
+                        received ? null : payload);
                     if (!receipt.getString("id").equals(id) || !receipt.optBoolean("received")) throw new Exception("Invalid share receipt.");
                     if ("saved".equals(receipt.getString("state"))) store.remove(id, true);
                     else store.update(id, true, "failed".equals(receipt.getString("state")) ? "received by Papan · " + receipt.optString("error") : "received by Papan · waiting to save");

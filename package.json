@@ -1,8 +1,8 @@
 {
   "name": "papan-android",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "Android link-sharing companion for Papan desktop",
+  "description": "Papan mobile collections and desktop companion for Android",
   "type": "module",
   "scripts": {
     "build:android": "node scripts/build-android.mjs",
