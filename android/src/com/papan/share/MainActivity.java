@@ -3,6 +3,7 @@ package com.papan.share;
 import android.app.Dialog;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.activity.OnBackPressedCallback;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -21,13 +22,17 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
-import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.slider.Slider;
+import com.google.android.material.materialswitch.MaterialSwitch;
+import com.google.android.material.radiobutton.MaterialRadioButton;
 import com.google.android.material.snackbar.Snackbar;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.GridLayoutManager;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -53,6 +58,7 @@ import android.widget.MediaController;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.VideoView;
+import android.widget.RadioGroup;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
@@ -63,21 +69,22 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MainActivity extends AppCompatActivity {
-    private static final int TEXT = Color.rgb(236,236,234), MUTED = Color.rgb(170,170,166), ACCENT = Color.rgb(208,245,173);
+    private int TEXT, MUTED, ACCENT;
     private LinearLayout root, board;
     private TabLayout tabs;
     private MaterialToolbar toolbar;
     private NavigationBarView navigation;
-    private ExtendedFloatingActionButton addLink;
+    private FloatingActionButton addLink;
     private TextInputLayout searchLayout;
     private RecyclerView pinGrid;
     private ScrollView boardScroll;
     private String gridKey = "";
+    private int gridAnchor = -1, gridAnchorOffset;
     private boolean loadingMore;
     private TextView status, heading;
     private EditText search, pairLink, desktopAddress;
     private Dialog saveDialog;
-    private AlertDialog connectionsDialog, detailDialog;
+    private AlertDialog connectionsDialog, detailDialog, appearanceDialog;
     private VideoView video;
     private boolean remote, foreground, settingsOpen, activityOpen, updatingTabs;
     private String selectedLocal = "", selectedRemote = "", pendingLink, sharedId;
@@ -91,18 +98,24 @@ public final class MainActivity extends AppCompatActivity {
     private final Runnable browsePoll = () -> { if (foreground && remote && detailDialog == null) loadDesktop(false, false); };
     private final Runnable detailPoll = this::checkDetailAccess;
     private final Runnable searchPoll = () -> { if (foreground && remote) loadDesktop(false, true); };
+    private final Runnable resizeBoard = this::renderPins;
     private final ExecutorService requests = Executors.newSingleThreadExecutor(), images = Executors.newFixedThreadPool(3);
     private DesktopLibrary desktop;
+    private SharedPreferences appearance;
     private interface Work { void run() throws Exception; }
 
     @Override public void onCreate(Bundle saved) {
+        appearance = getSharedPreferences("board-appearance", MODE_PRIVATE);
+        AppCompatDelegate.setDefaultNightMode(appearance.getInt("theme", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM));
         super.onCreate(saved); desktop = new DesktopLibrary(this);
+        TEXT = getColor(R.color.papan_on_surface); MUTED = getColor(R.color.papan_on_surface_variant); ACCENT = getColor(R.color.papan_primary);
+        selectedLocal = appearance.getString("selectedLocal", ""); selectedRemote = appearance.getString("selectedRemote", "");
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
         if (saved != null) { remote = saved.getBoolean("remote"); selectedLocal = saved.getString("local", ""); selectedRemote = saved.getString("desktop", ""); pendingLink = saved.getString("pendingLink"); sharedId = saved.getString("sharedId"); settingsOpen = saved.getBoolean("settingsOpen"); pairingDraft = saved.getString("pairingDraft", ""); addressDraft = saved.getString("addressDraft", ""); }
         activityOpen = saved != null && saved.getBoolean("activityOpen");
         buildLayout();
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-            @Override public void handleOnBackPressed() { if (remote || activityOpen) switchLocation(false); else { setEnabled(false); try { getOnBackPressedDispatcher().onBackPressed(); } finally { setEnabled(true); } } }
+            @Override public void handleOnBackPressed() { if (searchLayout.isShown()) toggleSearch(); else if (remote || activityOpen) switchLocation(false); else { setEnabled(false); try { getOnBackPressedDispatcher().onBackPressed(); } finally { setEnabled(true); } } }
         });
         if (activityOpen) renderActivity(); else if (!remote) refreshLocal();
         if (saved == null) receive(getIntent()); else if (pendingLink != null) handler.post(() -> chooseDestination(pendingLink)); else if (settingsOpen) handler.post(this::connections);
@@ -110,29 +123,34 @@ public final class MainActivity extends AppCompatActivity {
     @Override public void onNewIntent(Intent intent) { super.onNewIntent(intent); setIntent(intent); receive(intent); }
     @Override public void onStart() { super.onStart(); foreground = true; pollUntil = SystemClock.elapsedRealtime() + 30000; sync(); capture(); if (remote) loadDesktop(false, true); }
     @Override public void onStop() {
+        appearance.edit().putString("selectedLocal", selectedLocal).putString("selectedRemote", selectedRemote).apply();
         foreground = false; handler.removeCallbacks(poll); handler.removeCallbacks(browsePoll); handler.removeCallbacks(detailPoll); handler.removeCallbacks(searchPoll); boardGeneration++;
         if (video != null) { video.stopPlayback(); video = null; }
         if (detailDialog != null) detailDialog.dismiss();
+        if (appearanceDialog != null) appearanceDialog.dismiss();
         remotePins = new JSONArray(); for (int i = 0; i < remoteCollections.length(); i++) { JSONObject value = remoteCollections.optJSONObject(i); if (value != null && value.optBoolean("protected")) try { value.put("locked", true); } catch (Exception ignored) {} }
         if (remote) { clearBoard(); board.addView(text("Desktop contents hidden while Papan is in the background.", 16)); }
         requests.execute(desktop::clear); super.onStop();
     }
-    @Override public void onDestroy() { requests.shutdown(); images.shutdownNow(); super.onDestroy(); }
+    @Override public void onDestroy() { pinGrid.removeCallbacks(resizeBoard); requests.shutdown(); images.shutdownNow(); super.onDestroy(); }
     @Override public void onSaveInstanceState(Bundle state) { state.putBoolean("remote", remote); state.putBoolean("activityOpen", activityOpen); state.putString("local", selectedLocal); state.putString("desktop", selectedRemote); state.putString("pendingLink", pendingLink); state.putString("sharedId", sharedId); state.putBoolean("settingsOpen", settingsOpen); state.putString("pairingDraft", pairLink == null ? pairingDraft : pairLink.getText().toString()); state.putString("addressDraft", desktopAddress == null ? addressDraft : desktopAddress.getText().toString()); super.onSaveInstanceState(state); }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private LinearLayout column() { LinearLayout view = new LinearLayout(this); view.setOrientation(LinearLayout.VERTICAL); return view; }
     private LinearLayout row() { LinearLayout view = new LinearLayout(this); view.setOrientation(LinearLayout.HORIZONTAL); view.setGravity(Gravity.CENTER_VERTICAL); return view; }
     private void buildLayout() {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-        root = column(); root.setBackgroundColor(Color.BLACK); setContentView(root);
+        root = column(); root.setBackgroundColor(getColor(R.color.papan_background)); setContentView(root);
         ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
             Insets keyboard = insets.getInsets(WindowInsetsCompat.Type.ime());
             view.setPadding(bars.left, bars.top, bars.right, Math.max(bars.bottom, keyboard.bottom));
             return WindowInsetsCompat.CONSUMED;
         });
-        toolbar = new MaterialToolbar(this); toolbar.setTitle("papan."); root.addView(toolbar, new LinearLayout.LayoutParams(-1, -2));
-        toolbar.getMenu().add(0, 101, 0, "Paste link").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_IF_ROOM);
+        toolbar = new MaterialToolbar(this); toolbar.setTitle("papan."); toolbar.setTitleTextAppearance(this, R.style.PapanBrand); toolbar.setBackgroundColor(getColor(R.color.papan_background)); root.addView(toolbar, new LinearLayout.LayoutParams(-1, -2));
+        toolbar.getMenu().add(0, 107, 0, "Search").setIcon(R.drawable.search).setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS);
+        toolbar.getMenu().add(0, 108, 1, "Board appearance").setIcon(R.drawable.tune).setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS);
+        for (int action : new int[] {107, 108}) toolbar.getMenu().findItem(action).setIconTintList(ColorStateList.valueOf(MUTED));
+        toolbar.getMenu().add(0, 101, 2, "Paste link");
         toolbar.getMenu().add(0, 102, 1, "Connections");
         toolbar.getMenu().add(0, 103, 2, "New collection");
         toolbar.getMenu().add(0, 104, 3, "Rename collection");
@@ -146,6 +164,8 @@ public final class MainActivity extends AppCompatActivity {
                 case 104: renameCollection(); break;
                 case 105: deleteCollection(); break;
                 case 106: loadDesktop(false, true); break;
+                case 107: toggleSearch(); break;
+                case 108: boardAppearance(); break;
                 default: return false;
             }
             return true;
@@ -154,25 +174,29 @@ public final class MainActivity extends AppCompatActivity {
         LinearLayout middle = row(); middle.setGravity(Gravity.TOP); root.addView(middle, new LinearLayout.LayoutParams(-1, 0, 1));
         navigation = wide ? new NavigationRailView(this) : new BottomNavigationView(this);
         navigation.setLabelVisibilityMode(NavigationBarView.LABEL_VISIBILITY_LABELED);
-        navigation.getMenu().add(0, 1, 0, "On phone").setIcon(android.R.drawable.ic_menu_gallery);
-        navigation.getMenu().add(0, 2, 1, "Desktop").setIcon(android.R.drawable.ic_menu_slideshow);
-        navigation.getMenu().add(0, 3, 2, "Activity").setIcon(android.R.drawable.ic_menu_recent_history);
+        navigation.getMenu().add(0, 1, 0, "On phone").setIcon(R.drawable.phone);
+        navigation.getMenu().add(0, 2, 1, "Desktop").setIcon(R.drawable.desktop);
+        navigation.getMenu().add(0, 3, 2, "Activity").setIcon(R.drawable.history);
+        ColorStateList navigationColors = new ColorStateList(new int[][] {{android.R.attr.state_checked}, {}}, new int[] {ACCENT, MUTED});
+        navigation.setItemIconTintList(navigationColors); navigation.setItemTextColor(navigationColors); navigation.setBackgroundColor(getColor(R.color.papan_surface)); navigation.setElevation(0);
         if (wide) middle.addView(navigation, new LinearLayout.LayoutParams(dp(getResources().getConfiguration().fontScale > 1.5f ? 96 : 80), -1));
         LinearLayout content = column(); middle.addView(content, new LinearLayout.LayoutParams(0, -1, 1));
-        tabs = new TabLayout(this); tabs.setTabMode(TabLayout.MODE_SCROLLABLE); tabs.setTabGravity(TabLayout.GRAVITY_START); tabs.setInlineLabel(true); content.addView(tabs, new LinearLayout.LayoutParams(-1, -2));
+        tabs = new TabLayout(this); tabs.setBackgroundColor(getColor(R.color.papan_background)); tabs.setTabMode(TabLayout.MODE_SCROLLABLE); tabs.setTabGravity(TabLayout.GRAVITY_START); tabs.setInlineLabel(true); content.addView(tabs, new LinearLayout.LayoutParams(-1, -2));
         tabs.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override public void onTabSelected(TabLayout.Tab tab) { if (updatingTabs || tab.getTag() == null) return; String id = tab.getTag().toString(); search.setText(""); if (remote) { selectedRemote = id; loadDesktop(true, true); } else { selectedLocal = id; refreshLocal(); } }
             @Override public void onTabUnselected(TabLayout.Tab tab) {}
             @Override public void onTabReselected(TabLayout.Tab tab) {}
         });
-        heading = text("", 14); heading.setTextColor(MUTED); heading.setPadding(dp(16), dp(8), dp(16), dp(8)); content.addView(heading);
+        heading = text("", 14); heading.setTextColor(MUTED); heading.setPadding(dp(16), dp(8), dp(16), dp(8)); heading.setVisibility(View.GONE); content.addView(heading);
         search = field("Search this collection", false); search.setContentDescription("Search this collection"); search.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(500) }); searchLayout = fieldLayout(search);
+        searchLayout.setVisibility(View.GONE);
         LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(-1, -2); searchParams.setMargins(dp(16), 0, dp(16), dp(8)); content.addView(searchLayout, searchParams);
         search.addTextChangedListener(new TextWatcher() { public void beforeTextChanged(CharSequence value,int start,int count,int after) {} public void onTextChanged(CharSequence value,int start,int before,int count) { if (activityOpen) return; if (remote) { boardGeneration++; handler.removeCallbacks(searchPoll); handler.postDelayed(searchPoll, 250); } else renderPins(); } public void afterTextChanged(Editable value) {} });
         FrameLayout canvas = new FrameLayout(this); content.addView(canvas, new LinearLayout.LayoutParams(-1, 0, 1));
         boardScroll = new ScrollView(this); boardScroll.setFillViewport(true); board = column(); board.setPadding(dp(16), dp(4), dp(16), dp(104)); boardScroll.addView(board); canvas.addView(boardScroll, new FrameLayout.LayoutParams(-1, -1));
-        pinGrid = new RecyclerView(this); pinGrid.setPadding(dp(12), dp(4), dp(12), dp(104)); pinGrid.setClipToPadding(false); pinGrid.setHasFixedSize(true); pinGrid.setItemAnimator(null); pinGrid.setVisibility(View.GONE); canvas.addView(pinGrid, new FrameLayout.LayoutParams(-1, -1));
-        addLink = new ExtendedFloatingActionButton(this); addLink.setText("Add link"); addLink.setIconResource(android.R.drawable.ic_input_add); addLink.setContentDescription("Add link"); addLink.setOnClickListener(v -> enterLink());
+        pinGrid = new RecyclerView(this); pinGrid.setPadding(dp(10), dp(4), dp(10), dp(88)); pinGrid.setClipToPadding(false); pinGrid.setHasFixedSize(true); pinGrid.setItemAnimator(null); pinGrid.setVisibility(View.GONE); canvas.addView(pinGrid, new FrameLayout.LayoutParams(-1, -1));
+        pinGrid.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> { if (right - left != oldRight - oldLeft && pinGrid.getAdapter() != null) pinGrid.post(this::renderPins); });
+        addLink = new FloatingActionButton(this); addLink.setImageResource(R.drawable.add); addLink.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); addLink.setImageTintList(ColorStateList.valueOf(getColor(R.color.papan_on_primary))); addLink.setContentDescription("Add link"); addLink.setOnClickListener(v -> enterLink());
         FrameLayout.LayoutParams fab = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END); fab.setMargins(dp(16), dp(16), dp(16), dp(16)); canvas.addView(addLink, fab);
         status = text("", 14); status.setVisibility(View.GONE); root.addView(status);
         if (!wide) root.addView(navigation, new LinearLayout.LayoutParams(-1, -2));
@@ -226,11 +250,34 @@ public final class MainActivity extends AppCompatActivity {
         else if (remote) loadDesktop(false, true); else refreshLocal();
     }
     private void updateChrome() {
-        tabs.setVisibility(activityOpen ? View.GONE : View.VISIBLE); searchLayout.setVisibility(activityOpen ? View.GONE : View.VISIBLE); addLink.setVisibility(activityOpen ? View.GONE : View.VISIBLE);
+        tabs.setVisibility(activityOpen ? View.GONE : View.VISIBLE); if (activityOpen) searchLayout.setVisibility(View.GONE); heading.setVisibility(activityOpen ? View.VISIBLE : View.GONE); addLink.setVisibility(activityOpen ? View.GONE : View.VISIBLE);
+        toolbar.getMenu().findItem(107).setVisible(!activityOpen);
+        toolbar.getMenu().findItem(108).setVisible(!activityOpen);
         toolbar.getMenu().findItem(103).setVisible(!remote && !activityOpen);
         toolbar.getMenu().findItem(104).setVisible(!remote && !activityOpen && !selectedLocal.isEmpty());
         toolbar.getMenu().findItem(105).setVisible(!remote && !activityOpen && !selectedLocal.isEmpty());
         toolbar.getMenu().findItem(106).setVisible(remote);
+    }
+    private void toggleSearch() {
+        boolean show = !searchLayout.isShown(); searchLayout.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (show) search.requestFocus(); else { search.setText(""); search.clearFocus(); ((android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(search.getWindowToken(), 0); }
+    }
+    private String boardPreferenceKey() { return (remote ? "desktop:" + selectedRemote : "phone:" + selectedLocal); }
+    private void boardAppearance() {
+        final String key = boardPreferenceKey(); LinearLayout body = dialogBody();
+        TextView sizeLabel = text("Preview size", 18); body.addView(sizeLabel);
+        body.addView(text("Keep rows and columns aligned as previews get smaller or larger.", 14));
+        Slider size = new Slider(this); size.setId(View.generateViewId()); size.setContentDescription("Preview size"); sizeLabel.setLabelFor(size.getId()); size.setValueFrom(100); size.setValueTo(300); size.setStepSize(20); size.setValue(appearance.getInt("size:" + key, 160));
+        size.setLabelFormatter(value -> value <= 120 ? "Small" : value >= 240 ? "Large" : "Medium"); body.addView(size);
+        LinearLayout ends = row(); TextView small = text("Smaller", 14), large = text("Larger", 14); small.setTextColor(MUTED); large.setTextColor(MUTED); large.setGravity(Gravity.END); ends.addView(small, new LinearLayout.LayoutParams(0, -2, 1)); ends.addView(large, new LinearLayout.LayoutParams(0, -2, 1)); body.addView(ends);
+        size.addOnChangeListener((slider, value, fromUser) -> { if (fromUser) { appearance.edit().putInt("size:" + key, Math.round(value)).apply(); pinGrid.removeCallbacks(resizeBoard); pinGrid.postOnAnimation(resizeBoard); } });
+        MaterialSwitch fill = new MaterialSwitch(this); fill.setText("Fill image frames"); fill.setMinHeight(dp(48)); fill.setChecked(appearance.getBoolean("fill:" + key, true)); body.addView(fill); fill.setOnCheckedChangeListener((button, checked) -> { appearance.edit().putBoolean("fill:" + key, checked).apply(); renderPins(); });
+        body.addView(text("Appearance", 18)); RadioGroup themes = new RadioGroup(this);
+        int[] modes = {AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM, AppCompatDelegate.MODE_NIGHT_NO, AppCompatDelegate.MODE_NIGHT_YES}; String[] labels = {"Use phone setting", "Light", "Dark"};
+        for (int i = 0; i < modes.length; i++) { MaterialRadioButton option = new MaterialRadioButton(this); option.setId(i + 201); option.setText(labels[i]); option.setMinHeight(dp(48)); themes.addView(option); if (appearance.getInt("theme", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM) == modes[i]) option.setChecked(true); }
+        body.addView(themes); AlertDialog value = dialog("Board appearance", body); appearanceDialog = value;
+        value.setOnDismissListener(d -> { if (appearanceDialog == value) appearanceDialog = null; });
+        themes.setOnCheckedChangeListener((group, checked) -> { int mode = modes[checked - 201]; appearance.edit().putInt("theme", mode).apply(); value.dismiss(); AppCompatDelegate.setDefaultNightMode(mode); });
     }
     private void refreshLocal() {
         if (remote || activityOpen) return;
@@ -279,7 +326,7 @@ public final class MainActivity extends AppCompatActivity {
             });
         });
     }
-    private void clearBoard() { pinGrid.setVisibility(View.GONE); pinGrid.setAdapter(null); boardScroll.setVisibility(View.VISIBLE); board.removeAllViews(); }
+    private void clearBoard() { pinGrid.removeCallbacks(resizeBoard); pinGrid.setVisibility(View.GONE); pinGrid.setAdapter(null); boardScroll.setVisibility(View.VISIBLE); board.removeAllViews(); }
     private void renderPins() {
         if (board == null || activityOpen) return;
         try {
@@ -289,42 +336,51 @@ public final class MainActivity extends AppCompatActivity {
             if (collection == null) { clearBoard(); board.addView(text(remote ? "No collections are open on the desktop." : "Keep your references with you.", 22)); board.addView(text(remote ? "Open a collection in desktop Papan, then refresh." : "Create a collection, then paste or share a link. Your phone library works without the desktop.", 16)); board.addView(button(remote ? "Refresh desktop" : "Create collection", () -> { if (remote) loadDesktop(false, true); else newCollection(null); }, true)); return; }
             if (remote && collection.optBoolean("locked")) { clearBoard(); board.addView(text("This collection is protected.", 20)); board.addView(text("Enter its password to view or add references from this phone.", 16)); board.addView(button("Unlock collection", () -> unlock(collection, () -> loadDesktop(false, true)), true)); return; }
             JSONArray values = remote ? remotePins : MobileLibrary.get(this).snapshot().getJSONArray("pins"); String query = search.getText().toString().trim().toLowerCase(Locale.ROOT); ArrayList<JSONObject> pins = new ArrayList<>();
-            int width = (int)(getResources().getDisplayMetrics().widthPixels / getResources().getDisplayMetrics().density), columns = width >= 840 ? 4 : width >= 600 ? 3 : width < 340 || getResources().getConfiguration().fontScale > 1.5 ? 1 : 2;
+            float density = getResources().getDisplayMetrics().density;
+            int width = pinGrid.getWidth() > 0 ? Math.round(pinGrid.getWidth() / density) : getResources().getConfiguration().screenWidthDp - (navigation instanceof NavigationRailView ? 80 : 0);
+            int available = Math.max(1, width - 20), target = appearance.getInt("size:" + boardPreferenceKey(), 160), minimum = Math.round(112 * getResources().getConfiguration().fontScale);
+            int columns = Math.max(1, Math.min(6, Math.min(Math.max(1, available / minimum), Math.round((available + 8f) / (target + 8f)))));
+            if (getResources().getConfiguration().screenWidthDp < 340) columns = 1;
             for (int position = 0; position < values.length(); position++) { int i = remote ? position : values.length() - 1 - position; JSONObject pin = values.getJSONObject(i); if (!remote && !selectedLocal.equals(pin.optString("collectionId"))) continue; if (!remote && !query.isEmpty() && !(pin.optString("title") + " " + pin.optString("sourceUrl") + " " + pin.optString("notes")).toLowerCase(Locale.ROOT).contains(query)) continue;
                 pins.add(pin);
             }
             if (pins.isEmpty()) { clearBoard(); board.addView(text(query.isEmpty() ? "This collection is empty." : "No matching pins.", 20)); board.addView(text(query.isEmpty() ? "Paste a link or share one to Papan to add your first reference." : "Try another title, source or note.", 16)); return; }
             String key = (remote ? "desktop:" + selectedRemote : "phone:" + selectedLocal) + ":" + query;
-            android.os.Parcelable position = key.equals(gridKey) && pinGrid.getLayoutManager() != null ? pinGrid.getLayoutManager().onSaveInstanceState() : null;
-            PinAdapter adapter = new PinAdapter(pins, remote, columns); GridLayoutManager layout = new GridLayoutManager(this, columns);
-            layout.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() { @Override public int getSpanSize(int position) { return adapter.getItemViewType(position) == 1 ? columns : 1; } });
-            pinGrid.setLayoutManager(layout); pinGrid.setAdapter(adapter); if (position != null) layout.onRestoreInstanceState(position); gridKey = key;
+            GridLayoutManager previous = (GridLayoutManager)pinGrid.getLayoutManager(); int first = key.equals(gridKey) && previous != null ? previous.findFirstVisibleItemPosition() : -1;
+            View anchor = first >= 0 ? previous.findViewByPosition(first) : null; int offset = anchor == null ? 0 : previous.getDecoratedTop(anchor) - pinGrid.getPaddingTop();
+            // A second size event can arrive before the replacement layout has attached cards.
+            if (anchor == null && key.equals(gridKey)) { first = gridAnchor; offset = gridAnchorOffset; }
+            gridAnchor = first; gridAnchorOffset = offset;
+            PinAdapter adapter = new PinAdapter(pins, remote, Math.max(48, (available - columns * 8) / columns)); GridLayoutManager layout = new GridLayoutManager(this, columns);
+            final int spanCount = columns;
+            layout.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() { @Override public int getSpanSize(int position) { return adapter.getItemViewType(position) == 1 ? spanCount : 1; } });
+            pinGrid.setLayoutManager(layout); pinGrid.setAdapter(adapter); if (first >= 0) layout.scrollToPositionWithOffset(Math.min(first, adapter.getItemCount() - 1), offset); gridKey = key;
             boardScroll.setVisibility(View.GONE); pinGrid.setVisibility(View.VISIBLE);
         } catch (Exception error) { message(error.getMessage()); }
     }
     private final class PinAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
-        private final ArrayList<JSONObject> pins; private final boolean fromDesktop, more; private final int columns;
-        PinAdapter(ArrayList<JSONObject> values, boolean remote, int count) { pins = values; fromDesktop = remote; columns = count; more = remote && nextOffset >= 0; }
+        private final ArrayList<JSONObject> pins; private final boolean fromDesktop, more; private final int frameHeight;
+        PinAdapter(ArrayList<JSONObject> values, boolean remote, int height) { pins = values; fromDesktop = remote; frameHeight = height; more = remote && nextOffset >= 0; }
         @Override public int getItemCount() { return pins.size() + (more ? 1 : 0); }
         @Override public int getItemViewType(int position) { return position == pins.size() ? 1 : 0; }
         @Override public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int type) {
             if (type == 1) { Button more = button(loadingMore ? "Loading pins…" : "Load more pins", MainActivity.this::morePins, false); more.setEnabled(!loadingMore); return new RecyclerView.ViewHolder(more) {}; }
-            MaterialCardView card = new MaterialCardView(MainActivity.this); card.setRadius(dp(12)); card.setCardElevation(0); card.setStrokeWidth(dp(2)); card.setStrokeColor(new ColorStateList(new int[][] { {android.R.attr.state_focused}, {} }, new int[] { ACCENT, Color.TRANSPARENT })); card.setFocusable(true); card.setClickable(true);
+            MaterialCardView card = new MaterialCardView(MainActivity.this); card.setRadius(dp(10)); card.setCardElevation(0); card.setCardBackgroundColor(getColor(R.color.papan_surface)); card.setPreventCornerOverlap(false); card.setStrokeWidth(dp(2)); card.setStrokeColor(new ColorStateList(new int[][] { {android.R.attr.state_focused}, {} }, new int[] { ACCENT, Color.TRANSPARENT })); card.setFocusable(true); card.setClickable(true);
             RecyclerView.LayoutParams size = new RecyclerView.LayoutParams(-1, -2); size.setMargins(dp(4), dp(4), dp(4), dp(4)); card.setLayoutParams(size);
-            LinearLayout body = column(); body.setPadding(dp(8), dp(8), dp(8), dp(8)); card.addView(body); return new CardHolder(card, body);
+            LinearLayout body = column(); card.addView(body); return new CardHolder(card, body);
         }
         @Override public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
             if (!(holder instanceof CardHolder)) { Button more = (Button)holder.itemView; more.setText(loadingMore ? "Loading pins…" : "Load more pins"); more.setEnabled(!loadingMore); return; }
             CardHolder card = (CardHolder)holder; JSONObject pin = pins.get(position); card.body.removeAllViews(); card.itemView.setContentDescription("Open pin: " + pin.optString("title")); card.itemView.setOnClickListener(v -> openPin(pin, fromDesktop));
             try {
                 JSONObject item = cover(pin, fromDesktop);
-                if (item != null && "image".equals(item.optString("kind"))) addImage(card.body, pin, item, fromDesktop, columns == 1 ? 210 : 150, true);
-                else { TextView kind = text(item != null && "video".equals(item.optString("kind")) ? "VIDEO" : "LINK", 12); kind.setTextColor(ACCENT); kind.setMinHeight(dp(70)); kind.setGravity(Gravity.BOTTOM); card.body.addView(kind); }
-                TextView title = text(pin.optString("title", pin.optString("sourceUrl")), 15); title.setMaxLines(3); title.setEllipsize(android.text.TextUtils.TruncateAt.END); card.body.addView(title);
+                if (item != null && "image".equals(item.optString("kind"))) addImage(card.body, pin, item, fromDesktop, frameHeight, appearance.getBoolean("fill:" + boardPreferenceKey(), true));
+                else { String excerpt = item == null ? pin.optString("notes") : item.optString("text"); TextView kind = text(excerpt.isEmpty() ? item != null && "video".equals(item.optString("kind")) ? "Video" : "Saved link" : excerpt, 16); kind.setTextColor(MUTED); kind.setPadding(dp(14), dp(12), dp(14), dp(12)); kind.setGravity(Gravity.CENTER_VERTICAL); kind.setEllipsize(android.text.TextUtils.TruncateAt.END); kind.setMaxLines(Math.max(2, frameHeight / 26)); card.body.addView(kind, new LinearLayout.LayoutParams(-1, dp(frameHeight))); }
+                LinearLayout caption = column(); caption.setPadding(dp(12), dp(8), dp(12), dp(10)); card.body.addView(caption);
+                TextView title = text(pin.optString("title", pin.optString("sourceUrl")), 14); title.setTypeface(android.graphics.Typeface.create("sans-serif-medium", 0)); title.setMinLines(2); title.setMaxLines(2); title.setEllipsize(android.text.TextUtils.TruncateAt.END); caption.addView(title);
                 String host; try { host = new java.net.URI(pin.optString("sourceUrl")).getHost(); } catch (Exception ignored) { host = null; }
-                TextView source = text(host == null ? "Saved reference" : host, 12); source.setTextColor(MUTED); source.setMaxLines(1); source.setEllipsize(android.text.TextUtils.TruncateAt.END); card.body.addView(source);
-                if (!fromDesktop && "pending".equals(pin.optString("capture"))) card.body.addView(text("Preparing preview…", 12));
-                if (!fromDesktop && "failed".equals(pin.optString("capture"))) card.body.addView(text("Link saved · preview unavailable", 12));
+                String detail = !fromDesktop && "pending".equals(pin.optString("capture")) ? "Preparing preview…" : !fromDesktop && "failed".equals(pin.optString("capture")) ? "Preview unavailable" : host == null ? "Saved reference" : host;
+                TextView source = text(detail, 12); source.setTextColor(MUTED); source.setMinLines(1); source.setMaxLines(1); source.setEllipsize(android.text.TextUtils.TruncateAt.END); caption.addView(source);
             } catch (Exception error) { card.body.addView(text("Preview unavailable. Open this pin to retry.", 14)); }
         }
         @Override public void onViewRecycled(RecyclerView.ViewHolder holder) { if (holder instanceof CardHolder) ((CardHolder)holder).body.removeAllViews(); }
@@ -334,7 +390,7 @@ public final class MainActivity extends AppCompatActivity {
         CardHolder(MaterialCardView card, LinearLayout content) { super(card); body = content; }
     }
     private void addImage(LinearLayout body, JSONObject pin, JSONObject item, boolean fromDesktop, int height, boolean crop) {
-        FrameLayout frame = new FrameLayout(this); frame.setBackgroundColor(Color.rgb(24,24,24)); ImageView image = new ImageView(this); image.setScaleType(crop ? ImageView.ScaleType.CENTER_CROP : ImageView.ScaleType.FIT_CENTER); image.setContentDescription(pin.optString("title")); frame.addView(image, new FrameLayout.LayoutParams(-1, -1)); TextView loading = text("Loading preview…", 13); loading.setTextColor(MUTED); loading.setGravity(Gravity.CENTER); frame.addView(loading, new FrameLayout.LayoutParams(-1, -1)); image.setTag(loading); body.addView(frame, new LinearLayout.LayoutParams(-1, dp(height))); loadImage(image, pin, item, fromDesktop);
+        FrameLayout frame = new FrameLayout(this); frame.setBackgroundColor(getColor(R.color.papan_background)); ImageView image = new ImageView(this); image.setScaleType(crop ? ImageView.ScaleType.CENTER_CROP : ImageView.ScaleType.FIT_CENTER); image.setContentDescription(pin.optString("title")); frame.addView(image, new FrameLayout.LayoutParams(-1, -1)); TextView loading = text("Loading preview…", 13); loading.setTextColor(MUTED); loading.setGravity(Gravity.CENTER); frame.addView(loading, new FrameLayout.LayoutParams(-1, -1)); image.setTag(loading); body.addView(frame, new LinearLayout.LayoutParams(-1, dp(height))); loadImage(image, pin, item, fromDesktop);
     }
     private JSONObject cover(JSONObject pin, boolean fromDesktop) throws Exception {
         if (!fromDesktop) return pin.has("mediaFile") ? new JSONObject().put("kind", pin.optString("kind", "image")) : null;

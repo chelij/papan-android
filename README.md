@@ -1,6 +1,6 @@
 # Papan for Android
 
-Keep reference collections on your phone, or browse and add to open collections in [Papan desktop](https://github.com/chelij/papan). The Android app uses standard Material 3 controls around Papan's black canvas, collection tabs and media board. Phone collections work without pairing. Compact windows use bottom navigation; wider windows use a navigation rail. Desktop access pairs locally with a QR code; no cloud account is needed.
+Keep reference collections on your phone, or browse and add to open collections in [Papan desktop](https://github.com/chelij/papan). The Android app combines soft notebook surfaces with standard Material 3 controls and Papan's aligned media board. Preview sizing is adjustable, and light/dark appearance follows your phone unless you choose otherwise. Phone collections work without pairing. Compact windows use bottom navigation; wider windows use a navigation rail. Desktop access pairs locally with a QR code; no cloud account is needed.
 
 This mobile-board update is unreleased; the latest published Android APK remains 0.2.0. Build this checkout for the features described below.
 
@@ -9,10 +9,12 @@ This mobile-board update is unreleased; the latest published Android APK remains
 ## Use it
 
 1. Install the APK. Android 8+ is supported. In **On phone**, open the toolbar menu and choose **New collection**. The same menu renames or deletes a phone collection.
-2. Tap **Paste link**, **Add link**, or share a link from another app to **Papan**. Choose its collection in the destination sheet. Choosing a phone collection saves the link immediately, then fetches its preview. Open a pin to view media, edit its title/notes, save to another collection, open its source, retry a failed preview or delete it. Search filters the current collection.
+2. Choose **Paste link** from the toolbar menu, tap **Add link**, or share a link from another app to **Papan**. Choose its collection in the destination sheet. Choosing a phone collection saves the link immediately, then fetches its preview. Open a pin to view media, edit its title/notes, save to another collection, open its source, retry a failed preview or delete it. Tap the search icon to filter the current collection.
 3. For desktop access, connect both devices to a reachable trusted local network. In desktop **Receive from phone**, enable the receiver and **allow paired phones to browse and add to open collections**, choose the default destination/address, and save. The default TCP port is 47778. Browsing needs the matching unreleased desktop mobile-board patch; desktop 0.2.1+ still supports legacy default delivery.
 4. Choose **Pair a phone** on desktop. In Android **Connections**, tap **Pair desktop**, allow camera access and scan the QR. **Paste pairing link instead** and **Pair from link** work without a camera.
 5. Switch to **Desktop** to browse currently open collections. Protected collections ask for their password on this phone, even if desktop already unlocked them. The paste/share picker also lists desktop collections. The desktop extracts and saves remote links into the chosen collection.
+
+Open **Board appearance** using the sliders icon. Change **Preview size** to fit more or fewer aligned cards, or turn off **Fill image frames** to see whole images. Each collection remembers its size and frame fit on this phone, including desktop collections. The same panel offers **Use phone setting**, **Light** and **Dark** appearance.
 
 Phone capture saves ordinary HTML titles/Open Graph thumbnails and direct JPEG/PNG/WebP/GIF images or MP4/WebM videos up to 32 MiB. Previews are cached privately for offline use. It does not run desktop's site-specific extractors or page JavaScript; a failed preview keeps the link and offers retry. Phone and desktop libraries are separate, with no automatic synchronization or desktop `.papan` import/export in this version. Phone collections have no collection-password feature.
 
@@ -50,6 +52,8 @@ Then, from a [Papan desktop checkout](https://github.com/chelij/papan) with its 
 ```sh
 PAPAN_ANDROID_DIR=/path/to/papan-android PAPAN_ADB=/path/to/adb npm run test:android-ui
 ```
+
+To include native design/sizing/theme checks with the existing credited desktop artwork cache, also set `PAPAN_ANDROID_DEMO_ROOT=/path/to/papan`. This opt-in test fixture is copied only into the disposable test package; no sample library or artwork is bundled with the app.
 
 Unlock the USB-debugging phone first. Optional `PAPAN_ANDROID_SERIAL` selects a device. The check installs only `com.papan.share.test`, verifies its virtual display before operating the UI, and uses a disposable desktop collection and temporary USB reverse tunnel. It checks native Material navigation, clipboard paste/deduplication, standalone collections and cached media, live Camera2 frames, QR decoding at four rotations, pairing, selected-destination saves and saved-status updates. Desktop pagination/search, protected access, offline restart/retry, video playback/deletion and narrow/tablet/200% text layouts are covered by the same run. It preserves a readable clipboard value and removes its test app/tunnel afterward. `PAPAN_ANDROID_CAMERA_ONLY=1` skips clipboard checks when the phone is locked.
 
