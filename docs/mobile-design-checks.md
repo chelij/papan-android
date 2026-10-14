@@ -1,6 +1,6 @@
 # Mobile design delivery gate
 
-**PASS, 14 October 2026.** Direction: the user's explicit mymind reference, adjustable sizing, aligned rows/columns like desktop Papan, desktop-style single-line titles/source websites inside previews, and standard Android Material behavior. ENERGY **1**, RHYTHM **1**, MOTION **1**. [Implementation direction](mobile-design.md) and [native evidence/limits](verification.md#desktop-style-single-line-captions).
+**PASS, 14 October 2026.** Direction: the user's explicit mymind reference, adjustable sizing, aligned rows/columns like desktop Papan, desktop-style single-line titles/source websites inside previews, and standard Android Material behavior. ENERGY **1**, RHYTHM **1**, MOTION **1**. [Implementation direction](mobile-design.md) and [native evidence/limits](verification.md#lighter-caption-fade).
 
 This report covers the changed mobile interface. Native Material components provide the platform interaction patterns; Papan supplies its identity and content. A physical screen-reader/soft-keyboard session is still a device follow-up, not a claimed result.
 
@@ -30,7 +30,7 @@ This report covers the changed mobile interface. Native Material components prov
 | R-22 | PASS: no generated illustrations. |
 | R-23 | PASS: the user chose the mymind reference with Papan alignment and sizing. Existing Papan identity, licensed Material vectors and credited public-domain artwork fixtures are used; no identity imagery is generated. |
 | R-24 | PASS: On phone, Desktop and Activity are implemented destinations. Collection tabs select real collections. |
-| R-25 | PASS: all 18 measured text/control pairs meet AA. Actual gradient pixels are sampled at every text row over pure white; minimum title/source contrasts are 7.03/4.75:1. State/type labels retain AA contrast above the fade. Toolbar icon tints refresh after theme changes; native field/card focus states remain visible. |
+| R-25 | PASS: all 18 measured text/control pairs meet AA. Actual gradient pixels are sampled at every text row over pure white; minimum title/source contrasts are 4.67/4.80:1 with the lighter 55%/65% fade. State/type labels retain AA contrast above the fade. Toolbar icon tints refresh after theme changes; native field/card focus states remain visible. |
 | R-26 | PASS: native flows exercise navigation, collection CRUD, paste/add/share, editing, source intent, retry/delete, pairing/address recovery and delivery controls. Shared password/delivery handlers use actual HTTP and durable state. |
 | R-27 | PASS: empty boards, connecting/loading previews, offline recovery, field validation and failed-preview/retry states are visible. Cached media or notes do not hide a failed retry or its source website. |
 | R-28 | PASS: no generic FAQ. |
@@ -54,4 +54,4 @@ This report covers the changed mobile interface. Native Material components prov
 | C-4 | PASS: narrow/tablet/large-text/offline/error/locked states remain usable. Native mixed-proportion/long-title cards have equal square bounds at three sizes; both captions remain inside previews on one line with ellipsis and fitting text layouts, including actual artworks at 200% fonts. Native scrolling followed by repeated resizing retains the visible reference. Sizing persists per collection and off-screen cards recycle. |
 | C-5 | PASS: verification distinguishes emulator/loopback evidence from remaining physical-device, optical and Wi-Fi checks. |
 
-The native artifacts include decoded artwork boards at three sizes, light/dark modes, the size panel, local/remote/video/failed boards and narrow/tablet/200% artwork captures. `artifacts/android/desktop-captions-contrast.json` contains the measured color pairs. [Verification](verification.md#desktop-style-single-line-captions) records the exact preview bytes, commands and untested combinations. This gate verifies implementation and access; aesthetic acceptance remains the user's judgment.
+The native artifacts include decoded artwork boards at three sizes, light/dark modes, the size panel, local/remote/video/failed boards and narrow/tablet/200% artwork captures. `artifacts/android/lighter-captions-contrast.json` contains the measured color pairs. [Verification](verification.md#lighter-caption-fade) records the exact preview bytes, commands and untested combinations. This gate verifies implementation and access; aesthetic acceptance remains the user's judgment.
