@@ -98,6 +98,20 @@ Normal/test builds verify v2/v3 signatures with the existing key, JDK 21 and SDK
 
 Evidence: desktop `artifacts/android/ui/report.json`, `instrumentation.txt`, `style-*.png`, `video-board.png`, `failed-board.png`; Android `artifacts/android/desktop-captions-*` build, contrast, integrity, capture and cleanup records. Desktop provider bytes remain unchanged; prior desktop unit/native source/package evidence and successful CI at `613b89a` are reused. No host Xvfb or main-monitor window was used; temporary test state was removed/stopped and desktop IPC verified. No personal installation or release publication. Physical-phone/Wi-Fi/optical QR, Android 8 and screen-reader/physical soft-keyboard gaps remain. [Design gate](mobile-design-checks.md), [Android #2](https://github.com/chelij/papan-android/issues/2), [coordinator #5](https://github.com/chelij/papan/issues/5).
 
+## Lighter caption fade
+
+The 14 October 2026 refinement based on Android `e19acb0` reduces the caption gradient from 70%/85% to 55%/65% black at its midpoint/end. White title and near-white source text preserve contrast on the lighter backdrop. Fonts, single-line ellipsis, aligned sizing, controls and all storage/receiver behavior are unchanged. The existing native suite passes on Android 16/API 36 x86_64 (recorded virtual display **2**), including all three sizes, light/dark/system settings, 200% text, state labels, and three actual receiver saves. Every rendered caption row over pure white meets AA: minimum title/source contrast **4.67/4.80:1**; all eighteen custom pairs pass. Final light/dark/compact captures were inspected. Earlier unchanged provider and layout evidence remains valid.
+
+Signed normal/test builds verify v2/v3 signatures; all 23 common application classes match. All eighteen application source/resource files plus instrumentation source match the normal source bundle, without keys or seeded state. Both source checks pass. New preview bytes at the same unreleased 0.3.0/version-code-4 version:
+
+| Lighter preview/source | SHA-256 |
+| --- | --- |
+| `Papan-Android-lighter-captions-preview.apk` / normal APK | `4330316ce12f2400f4960b98f04e3d2579a55f149f3d76908e38716b317fbc59` |
+| Isolated APK | `1b198e9a51e43e462784794eed6a652e07ea8187ad5760641e0245f9635fcf58` |
+| `MainActivity.java` | `d244762a2b927e71f68c46a9e74b310a66e0fe3610d1d3b1c7e851f63769a254` |
+
+Evidence: desktop `artifacts/android/ui/` native report, instrumentation and PNGs; Android `artifacts/android/lighter-captions-*` build, contrast, integrity, capture and cleanup records. Temporary test state was removed/stopped and desktop IPC verified. No host Xvfb/main-monitor testing, personal installation or release publication. Physical-phone/Wi-Fi/optical QR, Android 8 and screen-reader/physical soft-keyboard gaps remain. [Current design gate](mobile-design-checks.md), [Android #2](https://github.com/chelij/papan-android/issues/2), [coordinator #5](https://github.com/chelij/papan/issues/5).
+
 ## Limits
 
 No physical-phone performance, optical QR scan, Wi-Fi reachability, Android 8 run, iOS app, published release pair or personal installation is claimed. The emulator uses ADB reverse tunnels to temporary loopback services. The source-browser check intercepts the intent; it does not operate another browser. Keyboard focus/activation and responsive bounds were checked; a screen-reader session and physical soft-keyboard interaction remain device follow-up checks.
