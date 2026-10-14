@@ -40,8 +40,9 @@ import java.lang.reflect.Method;
 
 // Included only in the separate --test APK. Never operate the personal app or display 0.
 public final class MobileFlowTest extends Instrumentation {
+    private double captionTitleContrast = 21, captionSourceContrast = 21;
     private Bundle arguments;
-    private MainActivity main;
+    private volatile MainActivity main;
     private ScanActivity scan;
     private VirtualDisplay display;
     private ImageReader output;
@@ -50,7 +51,8 @@ public final class MobileFlowTest extends Instrumentation {
     private String clipboardFixture;
     private int displayId;
     private float testFontScale = 1;
-    @Override public Activity newActivity(ClassLoader loader, String name, Intent intent) throws InstantiationException, IllegalAccessException, ClassNotFoundException { Activity activity = super.newActivity(loader, name, intent); if (activity instanceof MainActivity) { android.content.res.Configuration config = new android.content.res.Configuration(); config.fontScale = testFontScale; activity.applyOverrideConfiguration(config); main = (MainActivity)activity; } return activity; }
+    @Override public Activity newActivity(ClassLoader loader, String name, Intent intent) throws InstantiationException, IllegalAccessException, ClassNotFoundException { Activity activity = super.newActivity(loader, name, intent); if (activity instanceof MainActivity) { android.content.res.Configuration config = new android.content.res.Configuration(); config.fontScale = testFontScale; activity.applyOverrideConfiguration(config); } return activity; }
+    @Override public void callActivityOnCreate(Activity activity, Bundle saved) { super.callActivityOnCreate(activity, saved); if (activity instanceof MainActivity) main = (MainActivity)activity; }
     @Override public void onCreate(Bundle args) { super.onCreate(args); arguments = args; start(); }
     @Override public void onStart() {
         Bundle result = new Bundle();
@@ -141,8 +143,9 @@ public final class MobileFlowTest extends Instrumentation {
             result.putString("checks", "Virtual-display UI; " + (cameraOnly ? "share intent queues and deduplicates (clipboard skipped); " : "native phone collection creation; local image capture/decoded preview; per-collection paste/deduplication; pin edit/search; private storage reopen; Paste link reads clipboard and chooses destination; ") + "Pair desktop immediately opens Camera2 and receives frames; invalid pairing stays in scanner; QR decoding at all four rotations; QR result pairs actual receiver; queued link saves and foreground status updates; pairing preserved; open desktop boards; selected destination retained across offline storage/activity restart; newest-first desktop pagination preserved on refresh and search beyond loaded pages; protected password/cancel/wrong/correct access and desktop lock clear contents.");
             if (!cameraOnly) result.putString("checks", result.getString("checks") + " Direct MP4 capture/native playback/deletion; collection rename/delete/cancel and form validation; add/share sheet cancellation; failed capture/retry preserves the link; source browser intent; pairing/address recovery controls; keyboard focus; 300dp phone, 640dp tablet and 200% font reflow; Material bottom navigation/rail and Add link meet 48dp touch targets and remain inside the isolated window.");
             if (!cameraOnly && new File(getTargetContext().getFilesDir(), "style-demo.json").exists()) result.putString("checks", result.getString("checks") + " Credited artwork board: equal card bounds and aligned rows/columns at three preview sizes; real slider keyboard input; collection-specific sizing persists across fresh activity; fill/whole-image control; light/dark/system appearance controls; native screenshots with decoded real artworks.");
+            if (!cameraOnly) { result.putDouble("captionTitleContrast", captionTitleContrast); result.putDouble("captionSourceContrast", captionSourceContrast); result.putString("checks", result.getString("checks") + " Desktop-style captions: single-line title/source, no solid caption block, continuous rendered fade with AA contrast at every text row over pure white, full labels retained for details/accessibility."); }
             result.putString("status", "passed");
-        } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", error.toString()); if (main != null) try { screenshot(main, "failure.png"); result.putString("screenStatus", ((TextView)field(main, "status")).getText().toString()); result.putString("visibleText", text(main)); result.putBoolean("paired", PhoneStore.get(main).snapshot().has("config")); } catch (Exception ignored) {} }
+        } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); if (main != null) try { screenshot(main, "failure.png"); result.putString("screenStatus", ((TextView)field(main, "status")).getText().toString()); result.putString("visibleText", text(main)); result.putBoolean("paired", PhoneStore.get(main).snapshot().has("config")); } catch (Exception ignored) {} }
         finally {
             if (clipboard != null) onMain(() -> {
                 ClipData current = clipboard.getPrimaryClip();
@@ -316,16 +319,24 @@ public final class MobileFlowTest extends Instrumentation {
         String label = card.getContentDescription().toString().substring("Open pin: ".length());
         TextView title = captionText(card, label); require(title != null, "Full pin title is missing from the preview.");
         ViewGroup caption = (ViewGroup)title.getParent(); require(caption.getChildCount() >= 2 && caption.getChildAt(1) instanceof TextView, "Pin source is missing from the caption.");
+        require(!((TextView)caption.getChildAt(1)).getText().toString().startsWith("www."), "Pin source kept desktop's omitted www prefix.");
         View preview = (View)((View)caption.getParent()).getParent();
         require(Math.abs(card.getHeight() - preview.getHeight()) <= 2 && Math.abs(card.getWidth() - preview.getWidth()) <= 2 && Math.abs(preview.getWidth() - preview.getHeight()) <= 2, "Caption added height outside the square preview.");
-        int scrim = ((android.graphics.drawable.ColorDrawable)caption.getBackground()).getColor();
-        int brightest = androidx.core.graphics.ColorUtils.compositeColors(scrim, android.graphics.Color.WHITE);
+        require(caption.getBackground() == null, "Caption brought back the solid background block.");
+        View overlay = (View)caption.getParent(); require(overlay.getBackground() instanceof android.graphics.drawable.GradientDrawable, "Caption lost the desktop fade.");
+        ViewGroup previewRoot = (ViewGroup)preview;
+        for (int i = 0; i < previewRoot.getChildCount(); i++) if (previewRoot.getChildAt(i) instanceof TextView) { TextView stateLabel = (TextView)previewRoot.getChildAt(i); int background = ((android.graphics.drawable.ColorDrawable)stateLabel.getBackground()).getColor(); require(i > previewRoot.indexOfChild(overlay) && android.graphics.Color.alpha(background) == 255 && androidx.core.graphics.ColorUtils.calculateContrast(stateLabel.getCurrentTextColor(), background) >= 4.5, "Preview status/type label was obscured by the fade."); }
+        Bitmap fade = Bitmap.createBitmap(overlay.getWidth(), overlay.getHeight(), Bitmap.Config.ARGB_8888); android.graphics.Canvas canvas = new android.graphics.Canvas(fade); canvas.drawColor(android.graphics.Color.WHITE); overlay.getBackground().draw(canvas);
+        require(fade.getPixel(0, 0) != fade.getPixel(0, fade.getHeight() / 2) && fade.getPixel(0, fade.getHeight() / 2) != fade.getPixel(0, fade.getHeight() - 1), "Caption fade became a flat background.");
         int[] frame = new int[2]; preview.getLocationOnScreen(frame);
+        int[] fadePoint = new int[2]; overlay.getLocationOnScreen(fadePoint);
+        try {
         for (int i = 0; i < caption.getChildCount(); i++) { TextView text = (TextView)caption.getChildAt(i); int[] point = new int[2]; text.getLocationOnScreen(point);
-            require(text.isShown() && text.getLayout() != null && text.getLayout().getLineCount() >= 1 && text.getHeight() - text.getCompoundPaddingTop() - text.getCompoundPaddingBottom() >= text.getLayout().getHeight(), "Caption text clipped at the current font size.");
+            require(text.isShown() && text.getMaxLines() == 1 && text.getLayout() != null && text.getLayout().getLineCount() == 1 && text.getHeight() - text.getCompoundPaddingTop() - text.getCompoundPaddingBottom() >= text.getLayout().getHeight(), "Caption wrapped or clipped at the current font size.");
             require(point[0] >= frame[0] && point[1] >= frame[1] && point[0] + text.getWidth() <= frame[0] + preview.getWidth() && point[1] + text.getHeight() <= frame[1] + preview.getHeight(), "Caption escaped the preview image.");
-            require(androidx.core.graphics.ColorUtils.calculateContrast(text.getCurrentTextColor(), brightest) >= 4.5, "Caption loses contrast over a white preview.");
+            for (int y = point[1] - fadePoint[1]; y < point[1] - fadePoint[1] + text.getHeight(); y++) { double contrast = androidx.core.graphics.ColorUtils.calculateContrast(text.getCurrentTextColor(), fade.getPixel(0, y)); require(contrast >= 4.5, "Caption loses contrast over a white preview."); if (i == 0) captionTitleContrast = Math.min(captionTitleContrast, contrast); else captionSourceContrast = Math.min(captionSourceContrast, contrast); }
         }
+        } finally { fade.recycle(); }
     }
     private TextView captionText(View root, String value) { if (root instanceof TextView && value.contentEquals(((TextView)root).getText())) return (TextView)root; if (root instanceof ViewGroup) for (int i = 0; i < ((ViewGroup)root).getChildCount(); i++) { TextView found = captionText(((ViewGroup)root).getChildAt(i), value); if (found != null) return found; } return null; }
     private void responsive() throws Exception {
