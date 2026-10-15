@@ -137,11 +137,12 @@ public final class MobileFlowTest extends Instrumentation {
             JSONObject before = PhoneStore.get(main).snapshot();
             if (!cameraOnly) { clip("no link here"); click(main, "Paste link"); require(((TextView)field(main, "status")).getText().toString().contains("No web link was found") && PhoneStore.get(main).snapshot().getJSONArray("entries").length() == 0, "Invalid clipboard contents queued a link."); }
             require(before.getJSONObject("config").toString().equals(PhoneStore.get(main).snapshot().getJSONObject("config").toString()), "Clipboard paste changed the pairing.");
+            if (!cameraOnly) connectionFeedback(url, "connections-feedback.png");
             if (!cameraOnly && arguments.getString("controlEndpoint") != null) remoteBoards(url);
-            if (!cameraOnly) { localVideo(url); collectionControls(url); responsive(); }
+            if (!cameraOnly) { localVideo(url); collectionControls(url); responsive(); connectionFeedback(url, "connections-large-text.png"); }
             if (!cameraOnly && new File(getTargetContext().getFilesDir(), "style-demo.json").exists()) styleBoard();
             result.putString("checks", "Virtual-display UI; " + (cameraOnly ? "share intent queues and deduplicates (clipboard skipped); " : "native phone collection creation; local image capture/decoded preview; per-collection paste/deduplication; pin edit/search; private storage reopen; Paste link reads clipboard and chooses destination; ") + "Pair desktop immediately opens Camera2 and receives frames; invalid pairing stays in scanner; QR decoding at all four rotations; QR result pairs actual receiver; queued link saves and foreground status updates; pairing preserved; open desktop boards; selected destination retained across offline storage/activity restart; newest-first desktop pagination preserved on refresh and search beyond loaded pages; protected password/cancel/wrong/correct access and desktop lock clear contents.");
-            if (!cameraOnly) result.putString("checks", result.getString("checks") + " Direct MP4 capture/native playback/deletion; collection rename/delete/cancel and form validation; add/share sheet cancellation; failed capture/retry preserves the link; source browser intent; pairing/address recovery controls; keyboard focus; 300dp phone, 640dp tablet and 200% font reflow; Material bottom navigation/rail and Add link meet 48dp touch targets and remain inside the isolated window.");
+            if (!cameraOnly) result.putString("checks", result.getString("checks") + " Direct MP4 capture/native playback/deletion; collection rename/delete/cancel and form validation; add/share sheet cancellation; failed capture/retry preserves the link; source browser intent; pairing/address recovery controls; inline accessible Connections feedback, repeated pending-link warning and preserved destinations/key; no snackbar behind a modal, deferred board feedback after dismissal; keyboard focus; 300dp phone, 640dp tablet and 200% font reflow; Material bottom navigation/rail and Add link meet 48dp touch targets and remain inside the isolated window.");
             if (!cameraOnly && new File(getTargetContext().getFilesDir(), "style-demo.json").exists()) result.putString("checks", result.getString("checks") + " Credited artwork board: equal card bounds and aligned rows/columns at three preview sizes; real slider keyboard input; collection-specific sizing persists across fresh activity; fill/whole-image control; light/dark/system appearance controls; native screenshots with decoded real artworks.");
             if (!cameraOnly) { result.putDouble("captionTitleContrast", captionTitleContrast); result.putDouble("captionSourceContrast", captionSourceContrast); result.putString("checks", result.getString("checks") + " Desktop-style captions: single-line title/source, no solid caption block, continuous rendered fade with AA contrast at every text row over pure white, full labels retained for details/accessibility."); }
             result.putString("status", "passed");
@@ -164,16 +165,17 @@ public final class MobileFlowTest extends Instrumentation {
         if (label.equals("Load more pins")) onMain(() -> { try { RecyclerView grid = (RecyclerView)field(main, "pinGrid"); grid.scrollToPosition(grid.getAdapter().getItemCount() - 1); } catch (Exception error) { throw new RuntimeException(error); } });
         try { await(() -> has(label), 1000, "Control still transitioning."); } catch (Exception | AssertionError ignored) {}
         if (!has(label) && activity == main && main.hasWindowFocus()) onMain(() -> { try { com.google.android.material.appbar.MaterialToolbar toolbar = (com.google.android.material.appbar.MaterialToolbar)field(main, "toolbar"); for (int i = 0; i < toolbar.getMenu().size(); i++) { android.view.MenuItem item = toolbar.getMenu().getItem(i); if (item.isVisible() && label.contentEquals(item.getTitle())) { toolbar.showOverflowMenu(); break; } } } catch (Exception error) { throw new RuntimeException(error); } });
-        try { await(() -> has(label), 5000, "Missing focused control: " + label); } catch (Exception error) { throw new RuntimeException(error); }
-        onMain(() -> {
-            View view = findWindow(label); require(view != null && view.isShown(), "Missing visible control: " + label); require(view.getDisplay().getDisplayId() == displayId, "Wrong window display.");
+        boolean[] clicked = new boolean[1];
+        try { await(() -> { onMain(() -> {
+            View view = findWindow(label); if (view == null || !view.isShown()) return;
+            require(view.getDisplay().getDisplayId() == displayId, "Wrong window display.");
             view.requestRectangleOnScreen(new android.graphics.Rect(0, 0, view.getWidth(), view.getHeight()));
             while (!view.isClickable() && view.getParent() instanceof View) {
-                if (view.getParent() instanceof android.widget.AdapterView) { android.widget.AdapterView<?> list = (android.widget.AdapterView<?>)view.getParent(); int position = list.getPositionForView(view); require(position >= 0, "Menu item has no position."); list.performItemClick(view, position, list.getItemIdAtPosition(position)); return; }
+                if (view.getParent() instanceof android.widget.AdapterView) { android.widget.AdapterView<?> list = (android.widget.AdapterView<?>)view.getParent(); int position = list.getPositionForView(view); require(position >= 0, "Menu item has no position."); list.performItemClick(view, position, list.getItemIdAtPosition(position)); clicked[0] = true; return; }
                 view = (View)view.getParent();
             }
-            require(view.isClickable(), "Control is not clickable: " + label); view.performClick();
-        });
+            require(view.isClickable(), "Control is not clickable: " + label); view.performClick(); clicked[0] = true;
+        }); return clicked[0]; }, 5000, "Missing focused control: " + label); } catch (Exception error) { throw new RuntimeException(error); }
     }
     private View findWindow(String label) { for (View window : WindowInspector.getGlobalWindowViews()) if (window.hasWindowFocus() && window.getDisplay() != null && window.getDisplay().getDisplayId() == displayId) { View found = find(window, label); if (found != null && found.isShown()) return found; } return null; }
     private boolean has(String label) { boolean[] result = new boolean[1]; onMain(() -> result[0] = findWindow(label) != null); return result[0]; }
@@ -190,6 +192,44 @@ public final class MobileFlowTest extends Instrumentation {
         onMain(() -> { View card = description(main.getWindow().getDecorView(), "Open pin: " + url); require(card != null, "Video pin missing."); card.performClick(); }); click(main, "Play video");
         await(() -> field(main, "video") != null && ((android.widget.VideoView)field(main, "video")).getCurrentPosition() > 200, 10000, "Saved phone video did not play.");
         click(main, "Delete from phone"); click(main, "Delete"); await(() -> MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 2 && !media.exists(), 5000, "Phone delete did not remove saved media.");
+    }
+    private void connectionFeedback(String url, String capture) throws Exception {
+        await(() -> !busy(), 5000, "Delivery was still running before the connection check.");
+        PhoneStore store = PhoneStore.get(main); JSONObject config = store.snapshot().getJSONObject("config");
+        store.endpoint("http://127.0.0.1:65534");
+        String queued = store.enqueue(url + "?pending-dialog", "11111111-1111-1111-1111-111111111111", "Pending dialog check");
+        JSONObject entry = store.snapshot().getJSONArray("entries").getJSONObject(0);
+        String warning = "Deliver or dismiss pending links before replacing your pairing. Update the desktop address to reconnect instead.";
+        try {
+            click(main, "Connections"); click(main, "Pair desktop");
+            await(() -> has(warning), 5000, "Pairing warning was hidden behind Connections.");
+            await(() -> { TextView feedback = (TextView)field(main, "connectionFeedback"); android.graphics.Rect visible = new android.graphics.Rect(); return feedback.getGlobalVisibleRect(visible) && visible.height() >= feedback.getHeight(); }, 3000, "Connection warning did not scroll into view.");
+            screenshot(main, ((android.app.Dialog)field(main, "connectionsDialog")).getWindow(), capture);
+            onMain(() -> {
+                TextView feedback = (TextView)findWindow(warning); android.graphics.Rect visible = new android.graphics.Rect();
+                require(feedback.getGlobalVisibleRect(visible) && visible.height() >= feedback.getHeight(), "Connection warning was clipped or scrolled out of view.");
+                require(feedback.getBackground() == null && feedback.getAccessibilityLiveRegion() == View.ACCESSIBILITY_LIVE_REGION_POLITE, "Connection feedback lost its inline/accessibility treatment.");
+                View background = main.getWindow().getDecorView().findViewById(com.google.android.material.R.id.snackbar_text);
+                require(background == null || !background.isShown(), "A snackbar remained behind the open Connections window.");
+            });
+            click(main, "Close"); click(main, "Connections"); click(main, "Pair desktop");
+            require(has(warning), "Reopening Connections hid the repeated pending-link warning.");
+            input("http://192.168.1.10:47778", "http://127.0.0.1:65534"); click(main, "Update desktop address");
+            await(() -> has("Desktop address updated; queued destinations were kept."), 3000, "Address confirmation was hidden behind Connections.");
+            JSONObject kept = store.snapshot().getJSONArray("entries").getJSONObject(0);
+            for (String key : new String[] {"id", "url", "collectionId", "collectionName"}) require(entry.getString(key).equals(kept.getString(key)), "Connection recovery changed a pending link or destination.");
+            require(config.getString("token").equals(store.snapshot().getJSONObject("config").getString("token")), "Connection recovery replaced the pairing key.");
+            click(main, "Close"); await(() -> main.hasWindowFocus(), 5000, "Closing Connections did not restore the board.");
+            click(main, "Add link"); input("https://…", "https://example.com/keep-this-draft");
+            onMain(() -> main.onNewIntent(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "invalid shared link")));
+            require(has("Choose collection"), "Incoming invalid share closed the existing form.");
+            onMain(() -> { View background = main.getWindow().getDecorView().findViewById(com.google.android.material.R.id.snackbar_text); require(background == null || !background.isShown(), "Incoming share feedback appeared behind the form."); });
+            click(main, "Cancel");
+            await(() -> has(((TextView)field(main, "status")).getText().toString()), 3000, "Deferred share error was lost when the form closed.");
+        } finally {
+            onMain(() -> { try { android.app.Dialog dialog = (android.app.Dialog)field(main, "connectionsDialog"); if (dialog != null) dialog.dismiss(); } catch (Exception error) { throw new RuntimeException(error); } });
+            await(() -> !busy(), 5000, "Connection check delivery did not settle."); store.remove(queued, false); store.endpoint(config.getString("endpoint"));
+        }
     }
     private void collectionControls(String url) throws Exception {
         click(main, "Rename collection"); input("Collection name", ""); click(main, "Save");
@@ -224,6 +264,7 @@ public final class MobileFlowTest extends Instrumentation {
         await(() -> MobileLibrary.get(main).snapshot().getJSONArray("collections").length() == 2 && MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 2, 5000, "Collection delete affected the wrong references.");
         click(main, "Connections"); input("Complete pairing link", "not a pairing link"); click(main, "Pair from link");
         await(() -> !((TextView)field(main, "status")).getText().toString().equals("Pairing…"), 5000, "Invalid manual pairing did not return an error.");
+        require(has(((TextView)field(main, "status")).getText().toString()), "Manual pairing error was hidden behind Connections.");
         JSONObject config = PhoneStore.get(main).snapshot().getJSONObject("config");
         input("http://192.168.1.10:47778", config.getString("endpoint")); click(main, "Update desktop address");
         require(config.toString().equals(PhoneStore.get(main).snapshot().getJSONObject("config").toString()), "Address recovery changed the pairing.");
