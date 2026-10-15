@@ -138,7 +138,7 @@ public final class MainActivity extends AppCompatActivity {
         if (nearbyDialog != null) nearbyDialog.dismiss();
         remotePins = new JSONArray(); for (int i = 0; i < remoteCollections.length(); i++) { JSONObject value = remoteCollections.optJSONObject(i); if (value != null && value.optBoolean("protected")) try { value.put("locked", true); } catch (Exception ignored) {} }
         if (remote) { clearBoard(); board.addView(text("Desktop contents hidden while Papan is in the background.", 16)); }
-        requests.execute(desktop::clear); super.onStop();
+        if (!isChangingConfigurations()) requests.execute(desktop::clear); super.onStop();
     }
     @Override public void onDestroy() { pinGrid.removeCallbacks(resizeBoard); requests.shutdown(); images.shutdownNow(); super.onDestroy(); }
     @Override public void onSaveInstanceState(Bundle state) { state.putBoolean("remote", remote); state.putBoolean("activityOpen", activityOpen); state.putString("local", selectedLocal); state.putString("desktop", selectedRemote); state.putString("pendingLink", pendingLink); state.putString("sharedId", sharedId); state.putBoolean("settingsOpen", settingsOpen); state.putString("pairingDraft", pairLink == null ? pairingDraft : pairLink.getText().toString()); state.putString("addressDraft", desktopAddress == null ? addressDraft : desktopAddress.getText().toString()); super.onSaveInstanceState(state); }
@@ -397,8 +397,12 @@ public final class MainActivity extends AppCompatActivity {
             String notice = !fromDesktop && "pending".equals(pin.optString("capture")) ? "Preparing preview…" : !fromDesktop && "failed".equals(pin.optString("capture")) ? "Preview unavailable" : null;
             try {
                 JSONObject item = cover(pin, fromDesktop);
-                if (item != null && "image".equals(item.optString("kind"))) preview.addView(imageFrame(pin, item, fromDesktop, appearance.getBoolean("fill:" + boardPreferenceKey(), true)), new FrameLayout.LayoutParams(-1, -1));
+                if (item != null && ("image".equals(item.optString("kind")) || fromDesktop && item.has("thumbnailUrl"))) preview.addView(imageFrame(pin, item, fromDesktop, appearance.getBoolean("fill:" + boardPreferenceKey(), true)), new FrameLayout.LayoutParams(-1, -1));
                 else if (notice == null) { String excerpt = item == null ? pin.optString("notes") : item.optString("text"); TextView kind = text(excerpt.isEmpty() ? item != null && "video".equals(item.optString("kind")) ? "Video" : "Saved link" : excerpt, 16); kind.setTextColor(MUTED); kind.setPadding(dp(12), dp(10), dp(12), 0); kind.setEllipsize(android.text.TextUtils.TruncateAt.END); kind.setMaxLines(1); preview.addView(kind, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP)); }
+                if (fromDesktop && item != null && "video".equals(item.optString("kind")) && item.has("thumbnailUrl")) {
+                    TextView kind = text("Video", 12); kind.setTextColor(MUTED); kind.setBackgroundColor(getColor(R.color.papan_background)); kind.setPadding(dp(8), dp(4), dp(8), dp(4));
+                    FrameLayout.LayoutParams label = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END); label.setMargins(dp(8), dp(8), dp(8), dp(8)); preview.addView(kind, label);
+                }
             } catch (Exception error) { TextView failed = text("Preview unavailable", 14); failed.setPadding(dp(12), dp(10), dp(12), 0); preview.addView(failed); }
             LinearLayout overlay = column(), caption = column();
             overlay.setBackground(new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, new int[] {Color.TRANSPARENT, 0x8C000000, 0xA6000000}));
@@ -433,7 +437,7 @@ public final class MainActivity extends AppCompatActivity {
             try {
                 if (isDestroyed()) return;
                 BitmapFactory.Options options = new BitmapFactory.Options(); options.inJustDecodeBounds = true; byte[] bytes = null; File file = null;
-                if (fromDesktop) { bytes = desktop.media(item.getString("previewUrl")); BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options); }
+                if (fromDesktop) { bytes = desktop.media(item.optString("thumbnailUrl", item.optString("previewUrl"))); BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options); }
                 else { file = MobileLibrary.get(this).mediaFile(pin.optString("mediaFile")); if (file == null) return; BitmapFactory.decodeFile(file.toString(), options); }
                 options.inSampleSize = 1; while (options.outWidth / options.inSampleSize > 1000 || options.outHeight / options.inSampleSize > 1000) options.inSampleSize *= 2; options.inJustDecodeBounds = false;
                 Bitmap bitmap = fromDesktop ? BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options) : BitmapFactory.decodeFile(file.toString(), options);
