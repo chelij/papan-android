@@ -81,7 +81,9 @@ public final class MainActivity extends AppCompatActivity {
     private String gridKey = "";
     private int gridAnchor = -1, gridAnchorOffset;
     private boolean loadingMore;
-    private TextView status, heading;
+    private TextView status, heading, connectionFeedback;
+    private Snackbar snackbar;
+    private boolean messagePending;
     private EditText search, pairLink, desktopAddress;
     private Dialog saveDialog;
     private AlertDialog connectionsDialog, detailDialog, appearanceDialog;
@@ -122,6 +124,11 @@ public final class MainActivity extends AppCompatActivity {
     }
     @Override public void onNewIntent(Intent intent) { super.onNewIntent(intent); setIntent(intent); receive(intent); }
     @Override public void onStart() { super.onStart(); foreground = true; pollUntil = SystemClock.elapsedRealtime() + 30000; sync(); capture(); if (remote) loadDesktop(false, true); }
+    @Override public void onWindowFocusChanged(boolean focused) {
+        super.onWindowFocusChanged(focused);
+        if (!focused && snackbar != null) snackbar.dismiss();
+        if (focused && foreground && messagePending) showBoardMessage();
+    }
     @Override public void onStop() {
         appearance.edit().putString("selectedLocal", selectedLocal).putString("selectedRemote", selectedRemote).apply();
         foreground = false; handler.removeCallbacks(poll); handler.removeCallbacks(browsePoll); handler.removeCallbacks(detailPoll); handler.removeCallbacks(searchPoll); boardGeneration++;
@@ -231,14 +238,27 @@ public final class MainActivity extends AppCompatActivity {
     }
     private void message(String value) {
         String message = value == null ? "Could not complete the operation." : value;
-        if (status == null || message.contentEquals(status.getText())) return;
+        if (status == null) return;
+        boolean changed = !message.contentEquals(status.getText());
         status.setText(message);
-        if (!message.isEmpty() && foreground) {
-            Snackbar bar = Snackbar.make(root, message, Snackbar.LENGTH_LONG);
-            if (addLink.isShown()) bar.setAnchorView(addLink);
-            else if (navigation instanceof BottomNavigationView) bar.setAnchorView(navigation);
-            bar.show();
+        if (message.isEmpty() || !foreground) { messagePending = false; return; }
+        if (connectionsDialog != null && connectionsDialog.isShowing()) {
+            messagePending = false;
+            if (snackbar != null) snackbar.dismiss();
+            TextView feedback = connectionFeedback;
+            feedback.setText(message); feedback.setVisibility(View.VISIBLE);
+            feedback.post(() -> feedback.requestRectangleOnScreen(new android.graphics.Rect(0, 0, feedback.getWidth(), feedback.getHeight())));
+            return;
         }
+        messagePending = changed || messagePending;
+        if (root.hasWindowFocus() && messagePending) showBoardMessage();
+    }
+    private void showBoardMessage() {
+        messagePending = false;
+        snackbar = Snackbar.make(root, status.getText(), Snackbar.LENGTH_LONG);
+        if (addLink.isShown()) snackbar.setAnchorView(addLink);
+        else if (navigation instanceof BottomNavigationView) snackbar.setAnchorView(navigation);
+        snackbar.show();
     }
     private void async(Work work, Runnable complete) { requests.execute(() -> { try { work.run(); runOnUiThread(() -> { if (!isDestroyed()) complete.run(); }); } catch (Exception error) { runOnUiThread(() -> { if (!isDestroyed()) message(error.getMessage()); }); } }); }
     private String clipboardText() { ClipData data = ((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).getPrimaryClip(); if (data == null || data.getItemCount() == 0) return null; ClipData.Item value = data.getItemAt(0); return value.getText() != null ? value.getText().toString() : value.getUri() != null ? value.getUri().toString() : null; }
@@ -496,7 +516,9 @@ public final class MainActivity extends AppCompatActivity {
     }
     private void editPin(JSONObject pin) { LinearLayout body = dialogBody(); EditText title = field("Title", false), notes = field("Notes", true); title.setText(pin.optString("title")); notes.setText(pin.optString("notes")); addField(body, title); addField(body, notes); AlertDialog value = dialog("Edit phone pin", body); Button save = button("Save changes", () -> { try { MobileLibrary.get(this).edit(pin.getString("id"), title.getText().toString(), notes.getText().toString()); value.dismiss(); if (detailDialog != null) detailDialog.dismiss(); refreshLocal(); } catch (Exception error) { error(title, error.getMessage()); } }, true); body.addView(save); }
     private void connections() {
-        settingsOpen = true; LinearLayout body = dialogBody(); body.addView(text("On the desktop, open Receive from phone, enable the receiver and phone browsing, then choose Pair a phone.", 15)); body.addView(button("Pair desktop", this::scanPair, true)); pairLink = field("Complete pairing link", false); pairLink.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI); addField(body, pairLink);
+        settingsOpen = true; LinearLayout body = dialogBody(); body.addView(text("On the desktop, open Receive from phone, enable the receiver and phone browsing, then choose Pair a phone.", 15));
+        connectionFeedback = text("", 14); connectionFeedback.setVisibility(View.GONE); connectionFeedback.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE); body.addView(connectionFeedback);
+        body.addView(button("Pair desktop", this::scanPair, true)); pairLink = field("Complete pairing link", false); pairLink.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI); addField(body, pairLink);
         pairLink.setText(pairingDraft); body.addView(button("Paste pairing link instead", () -> { String copied = clipboardText(); if (copied != null) { pairLink.setText(copied); pair(copied); } else message("Copy the complete desktop pairing link first."); }, false)); body.addView(button("Pair from link", () -> pair(pairLink.getText().toString()), false));
         try { JSONObject state = PhoneStore.get(this).snapshot(); if (state.has("config")) { EditText address = field("http://192.168.1.10:47778", false); desktopAddress = address; address.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI); address.setText(addressDraft.isEmpty() ? state.getJSONObject("config").optString("endpoint") : addressDraft); addField(body, address); body.addView(button("Update desktop address", () -> { try { PhoneStore.get(this).endpoint(Delivery.endpoint(address.getText().toString())); addressDraft = ""; remotePins = new JSONArray(); remoteCollections = new JSONArray(); message("Desktop address updated; queued destinations were kept."); sync(); if (remote) loadDesktop(false, true); } catch (Exception error) { error(address, error.getMessage()); } }, false)); } } catch (Exception error) { message(error.getMessage()); }
         body.addView(text("Desktop links, passwords and media use HTTP on your trusted local network. Phone collections and previews stay in app-private storage. Phone and desktop collections are separate. Pending deliveries survive restarts; Android controls background retry timing.", 13)); connectionsDialog = dialog("Connections", body); connectionsDialog.setOnDismissListener(d -> { settingsOpen = false; connectionsDialog = null; });
