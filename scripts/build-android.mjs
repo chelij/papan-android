@@ -12,7 +12,7 @@ const run = (command, args) => { const result = spawnSync(command, args, { stdio
 const test = process.argv.includes('--test'), debug = test || process.argv.includes('--debug');
 const output = path.join(root, 'artifacts', 'android'); await mkdir(output, { recursive: true });
 const assets = path.join(output, 'gradle-assets'); await rm(path.join(assets, 'papan-source'), { recursive: true, force: true });
-for (const source of ['android/src', 'android/res', 'android/test', 'android/gradle', 'android/gradlew', 'android/gradlew.bat', 'android/build.gradle', 'android/settings.gradle', 'android/gradle.properties', 'android/gradle.lockfile', 'android/AndroidManifest.xml', 'android/isolated-manifest.xml', 'LICENSE', 'THIRD-PARTY.md', 'package.json', 'scripts/build-android.mjs']) {
+for (const source of ['android/src', 'android/res', 'android/test', 'android/gradle', 'android/gradlew', 'android/gradlew.bat', 'android/build.gradle', 'android/settings.gradle', 'android/gradle.properties', 'android/gradle.lockfile', 'android/AndroidManifest.xml', 'android/isolated-manifest.xml', 'LICENSE', 'THIRD-PARTY.md', 'package.json', 'scripts/build-android.mjs', 'scripts/test-location-menu.mjs']) {
   const target = path.join(assets, 'papan-source', source); await mkdir(path.dirname(target), { recursive: true }); await cp(source, target, { recursive: true });
 }
 const license = path.join(assets, 'Apache-2.0.txt');

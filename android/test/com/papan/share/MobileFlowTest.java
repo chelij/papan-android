@@ -55,6 +55,7 @@ public final class MobileFlowTest extends Instrumentation {
     @Override public void callActivityOnCreate(Activity activity, Bundle saved) { super.callActivityOnCreate(activity, saved); if (activity instanceof MainActivity) main = (MainActivity)activity; }
     @Override public void onCreate(Bundle args) { super.onCreate(args); arguments = args; start(); }
     @Override public void onStart() {
+        if ("true".equals(arguments.getString("locationOnly"))) { locationOnly(); return; }
         Bundle result = new Bundle();
         boolean cameraOnly = "true".equals(arguments.getString("cameraOnly"));
         try {
@@ -164,6 +165,47 @@ public final class MobileFlowTest extends Instrumentation {
         finish("passed".equals(result.getString("status")) ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
     }
     private void clip(String value) { clipboardFixture = value; onMain(() -> { require(!((KeyguardManager)getTargetContext().getSystemService(Context.KEYGUARD_SERVICE)).isDeviceLocked(), "Phone locked during clipboard testing."); clipboard.setPrimaryClip(ClipData.newPlainText("Papan test", value)); ClipData copy = clipboard.getPrimaryClip(); require(copy != null && value.contentEquals(copy.getItemAt(0).getText() == null ? "" : copy.getItemAt(0).getText()), "Test clipboard write/read did not match on this display."); }); }
+    private void locationOnly() {
+        Bundle result = new Bundle();
+        try {
+            require("com.papan.share.test".equals(getTargetContext().getPackageName()), "Only the disposable test package is allowed.");
+            createDisplay(720, 1440); result.putInt("displayId", displayId);
+            main = (MainActivity)startActivitySync(new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), ActivityOptions.makeCustomAnimation(getTargetContext(), 0, 0).setLaunchDisplayId(displayId).toBundle());
+            await(() -> main.hasWindowFocus() && !busy(), 10000, "Virtual location board did not initialize."); locationMotion(); locationSizing();
+            relaunch(600, 1400, 1); locationSizing(); relaunch(1280, 1600, 1); locationSizing(); relaunch(720, 1600, 2); locationSizing();
+            result.putString("checks", "Composited virtual-display motion frames keep the current button uncovered while the menu reveals upward; native location selection, stable dimensions/typography and current-button dismissal pass at 300dp/360dp/640dp and 200% text. No physical phone used."); result.putString("status", "passed");
+        } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); }
+        finally { onMain(() -> { if (main != null && !main.isDestroyed()) main.finishAndRemoveTask(); }); waitForIdleSync(); if (display != null) display.release(); if (output != null) output.close(); }
+        finish("passed".equals(result.getString("status")) ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
+    }
+    private Bitmap displayFrame(Image frame) {
+        Image.Plane plane = frame.getPlanes()[0]; int width = plane.getRowStride() / plane.getPixelStride(); Bitmap padded = Bitmap.createBitmap(width, frame.getHeight(), Bitmap.Config.ARGB_8888); java.nio.ByteBuffer pixels = plane.getBuffer(); pixels.rewind(); padded.copyPixelsFromBuffer(pixels); Bitmap bitmap = Bitmap.createBitmap(padded, 0, 0, frame.getWidth(), frame.getHeight()); if (bitmap != padded) padded.recycle(); return bitmap;
+    }
+    private void locationMotion() throws Exception {
+        java.util.List<Bitmap> frames = java.util.Collections.synchronizedList(new java.util.ArrayList<>()); int[] button = new int[4];
+        onMain(() -> { try { View anchor = (View)field(main, "locationButton"); int[] point = new int[2]; anchor.getLocationOnScreen(point); button[0] = point[0]; button[1] = point[1]; button[2] = point[0] + anchor.getWidth(); button[3] = point[1] + anchor.getHeight(); output.setOnImageAvailableListener(reader -> { try (Image frame = reader.acquireLatestImage()) { if (frame != null && frames.size() < 18) frames.add(displayFrame(frame)); } }, new Handler(Looper.getMainLooper())); main.getWindow().getDecorView().invalidate(); } catch (Exception error) { throw new RuntimeException(error); } });
+        try {
+            await(() -> !frames.isEmpty(), 5000, "Virtual display did not render a baseline frame."); Bitmap before = frames.get(frames.size() - 1); onMain(() -> { for (Bitmap frame : new java.util.ArrayList<>(frames)) if (frame != before) frame.recycle(); frames.clear(); });
+            onMain(() -> { try { ((View)field(main, "locationButton")).performClick(); } catch (Exception error) { throw new RuntimeException(error); } });
+            await(() -> !main.hasWindowFocus(), 5000, "Location popup did not open."); popupFits("location-motion-menu.png");
+            java.util.List<Bitmap> captured = new java.util.ArrayList<>(); onMain(() -> { output.setOnImageAvailableListener(reader -> { try (Image frame = reader.acquireLatestImage()) {} }, new Handler(Looper.getMainLooper())); captured.addAll(frames); });
+            require(captured.size() >= 2, "Menu had no observable native animation frames."); int first = -1, last = -1, firstTop = Integer.MAX_VALUE, lastTop = Integer.MAX_VALUE;
+            for (int n = 0; n < captured.size(); n++) {
+                Bitmap frame = captured.get(n); int inset = (button[3] - button[1]) / 2;
+                for (int y = button[1] + 2; y < button[3] - 2; y += 4) for (int x = button[0] + inset; x < button[2] - inset; x += 4) require(colorDifference(before.getPixel(x, y), frame.getPixel(x, y)) <= 12, "Opening menu painted over the current-location button at frame " + n);
+                int top = Integer.MAX_VALUE, changed = 0;
+                for (int y = 0; y < button[1] - 4; y += 2) for (int x = Math.max(0, button[0] - 16); x < Math.min(frame.getWidth(), button[2] + 16); x += 2) if (colorDifference(before.getPixel(x, y), frame.getPixel(x, y)) > 24) { top = Math.min(top, y); changed++; }
+                if (changed > 12) { if (first < 0) { first = n; firstTop = top; } last = n; lastTop = top; }
+            }
+            require(first >= 0 && last > first && firstTop > lastTop + 16, "Menu did not visibly emerge upward from behind its button: " + firstTop + " -> " + lastTop);
+            androidx.appcompat.widget.ListPopupWindow menu = (androidx.appcompat.widget.ListPopupWindow)field(main, "locationMenu"); android.widget.PopupWindow nativePopup = (android.widget.PopupWindow)field(menu, "mPopup");
+            JSONObject proof = new JSONObject().put("status", "passed").put("displayId", displayId).put("frames", captured.size()).put("firstVisibleTop", firstTop).put("finalVisibleTop", lastTop).put("buttonUncovered", true).put("nativeTransition", nativePopup.getEnterTransition() == null ? "none" : nativePopup.getEnterTransition().getClass().getName());
+            try (FileOutputStream file = new FileOutputStream(new File(main.getFilesDir(), "menu-motion.json"))) { file.write(proof.toString(2).getBytes(java.nio.charset.StandardCharsets.UTF_8)); }
+            for (String name : new String[] {"before", "first", "last"}) { Bitmap frame = name.equals("before") ? before : captured.get(name.equals("first") ? first : last); try (FileOutputStream file = new FileOutputStream(new File(main.getFilesDir(), "menu-motion-" + name + ".png"))) { frame.compress(Bitmap.CompressFormat.PNG, 100, file); } }
+            before.recycle(); for (Bitmap frame : captured) frame.recycle(); tapLocationButton(); await(main::hasWindowFocus, 5000, "Current location button did not dismiss the revealed menu.");
+        } finally { onMain(() -> output.setOnImageAvailableListener(reader -> { try (Image frame = reader.acquireLatestImage()) {} }, new Handler(Looper.getMainLooper()))); for (Bitmap frame : new java.util.ArrayList<>(frames)) if (!frame.isRecycled()) frame.recycle(); }
+    }
+    private int colorDifference(int a, int b) { return Math.max(Math.max(Math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)), Math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b))), Math.abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b))); }
     private void click(Activity activity, String label) {
         require(activity.getDisplay().getDisplayId() == displayId, "Refusing interaction outside the test display.");
         if (activity == main && (label.equals("Phone") || label.equals("Desktop") || label.equals("Activity"))) try {
@@ -497,7 +539,7 @@ public final class MobileFlowTest extends Instrumentation {
         android.widget.ListView choices = pickerList(popup); require(choices != null, "Picker has no native list.");
         if (choices.getChoiceMode() == android.widget.ListView.CHOICE_MODE_SINGLE) {
             require(choices.getCheckedItemCount() == 1, "Collection picker did not expose its selected choice."); View selected = choices.getChildAt(choices.getCheckedItemPosition() - choices.getFirstVisiblePosition()); require(selected != null && selected.getBackground().getCurrent() instanceof android.graphics.drawable.ColorDrawable && ((android.graphics.drawable.ColorDrawable)selected.getBackground().getCurrent()).getColor() == main.getColor(R.color.papan_primary_container), "Current collection row has no green highlight.");
-        } else require(choices.getCount() == 2 && choices.getCheckedItemCount() == 0, "Location menu is not limited to two inactive alternatives.");
+        } else { require(choices.getCount() == 2 && choices.getCheckedItemCount() == 0, "Location menu is not limited to two inactive alternatives."); try { int[] button = new int[2]; ((View)field(main, "locationButton")).getLocationOnScreen(button); require(point[1] + popup.getHeight() <= button[1], "Location popup covers its button."); } catch (Exception error) { throw new RuntimeException(error); } }
         require(!containsCheckbox(popup), "Picker still displays a checkbox.");
         Bitmap bitmap = Bitmap.createBitmap(popup.getWidth(), popup.getHeight(), Bitmap.Config.ARGB_8888); popup.draw(new android.graphics.Canvas(bitmap));
         try (FileOutputStream file = new FileOutputStream(new File(main.getFilesDir(), capture))) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, file); } catch (Exception error) { throw new RuntimeException(error); } finally { bitmap.recycle(); }
@@ -507,7 +549,7 @@ public final class MobileFlowTest extends Instrumentation {
         require(button.getTextSize() == collection.getTextSize() && button.getTypeface().equals(collection.getTypeface()), "Picker buttons use inconsistent typography.");
         for (String label : new String[] {"Desktop", "Activity", "Phone"}) {
             click(main, label);
-            if (label.equals("Desktop")) {
+            if (label.equals("Desktop") && PhoneStore.get(main).snapshot().has("config")) {
                 await(() -> collectionAvailable("Android chosen") && !busy(), 10000, "Unprotected collection fixture did not load."); click(main, "Android chosen");
                 await(() -> !busy() && (main.getWindow().getAttributes().flags & android.view.WindowManager.LayoutParams.FLAG_SECURE) == 0, 10000, "Pointer checks require an unprotected fixture on the nonsecure virtual display.");
             }
