@@ -276,6 +276,7 @@ public final class MainActivity extends AppCompatActivity {
     }
     private ListPopupWindow picker(View anchor, String[] labels, int[] icons, int selected, java.util.function.IntConsumer choose) {
         ListPopupWindow popup = new ListPopupWindow(this); popup.setAnchorView(anchor); popup.setModal(true); popup.setInputMethodMode(ListPopupWindow.INPUT_METHOD_NOT_NEEDED);
+        if (anchor == locationButton) { popup.setVerticalOffset(-dp(8)); popup.setAnimationStyle(0); popup.setEpicenterBounds(new android.graphics.Rect(0, -dp(8), anchor.getWidth(), -dp(8))); }
         android.text.TextPaint measure = new android.text.TextPaint(((TextView)anchor).getPaint()); int width = anchor.getWidth();
         for (String label : labels) width = Math.max(width, (int)Math.ceil(measure.measureText(label)) + dp(icons == null ? 32 : 68));
         popup.setWidth(Math.min(Math.min(dp(320), getResources().getDisplayMetrics().widthPixels - dp(32)), width));

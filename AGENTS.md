@@ -4,3 +4,4 @@
 - Android owns capture and delivery; the desktop repository owns the receiver protocol and ecosystem inventory. File Android tasks here and link cross-component work to one coordinating issue in `chelij/papan`.
 - Work affecting desktop is complete when the overview and coordinating issue record the contract/compatibility change, exact checked versions, evidence, and limits. Published releases also update the inventory.
 - Use the README's build and device-check instructions. Record optical QR and Wi-Fi evidence separately from isolated USB/QR-fixture checks.
+- Test Android changes on a disposable headless emulator, never on the user's phone. Do not operate the phone for verification; install on it only when the user explicitly requests installation.

@@ -16,7 +16,7 @@ This mobile-board update is unreleased; the latest published Android APK remains
 4. In Android **Connections**, tap **Pair desktop**, choose a nearby computer and approve the matching six-digit code in desktop Papan within two minutes. The desktop must have its receiver enabled. If discovery is unavailable, choose **Pair a phone** on desktop and **Scan QR** on the phone, allow camera access and scan the QR. **Paste pairing link instead** and **Pair from link** work without a camera.
 5. Switch to **Desktop** to browse currently open collections. Protected collections ask for their password on this phone, even if desktop already unlocked them. The paste/share picker also lists desktop collections. The desktop extracts and saves remote links into the chosen collection.
 
-Open **Board appearance** using the sliders icon. Change **Preview size** to fit more or fewer aligned cards, or turn off **Fill image frames** to see whole images. Each collection remembers its size and frame fit on this phone, including desktop collections. The same panel offers **Use phone setting**, **Light** and **Dark** appearance.
+Open **Board appearance** using the toolbar menu. Change **Preview size** to fit more or fewer aligned cards, or turn off **Fill image frames** to see whole images. Each collection remembers its size and frame fit on this phone, including desktop collections. The same panel offers **Use phone setting**, **Light** and **Dark** appearance.
 
 Desktop pins follow the order arranged on desktop, including manual moves picked up by the foreground board's five-second refresh. Each protected collection needs its password once per app session; switching between already unlocked collections keeps their access. Actual app close or desktop locking still ends access. Phone-only collections retain their newest-first order.
 
@@ -58,12 +58,20 @@ npm run build:android -- --test
 Then, from a [Papan desktop checkout](https://github.com/chelij/papan) with its development dependencies installed:
 
 ```sh
-PAPAN_ANDROID_DIR=/path/to/papan-android PAPAN_ADB=/path/to/adb npm run test:android-ui
+PAPAN_ANDROID_SERIAL=emulator-5554 PAPAN_ANDROID_DIR=/path/to/papan-android PAPAN_ADB=/path/to/adb npm run test:android-ui
 ```
 
 To include native design/sizing/theme checks with the existing credited desktop artwork cache, also set `PAPAN_ANDROID_DEMO_ROOT=/path/to/papan`. This opt-in test fixture is copied only into the disposable test package; no sample library or artwork is bundled with the app.
 
-Unlock the USB-debugging phone first. Optional `PAPAN_ANDROID_SERIAL` selects a device. The check installs only `com.papan.share.test`, verifies its virtual display before operating the UI, and uses a disposable desktop collection and temporary USB reverse tunnel. It checks native Material navigation, clipboard paste/deduplication, standalone collections and cached media, live Camera2 frames, QR decoding at four rotations, pairing, selected-destination saves and saved-status updates. Desktop pagination/search, protected access, offline restart/retry, video playback/deletion and narrow/tablet/200% text layouts are covered by the same run. It preserves a readable clipboard value and removes its test app/tunnel afterward. `PAPAN_ANDROID_CAMERA_ONLY=1` skips clipboard checks when the phone is locked.
+Use a disposable headless emulator and set `PAPAN_ANDROID_SERIAL` to its emulator serial. The test rejects physical-phone targets before running ADB. It installs only `com.papan.share.test`, verifies its private virtual display before operating the UI, and uses a disposable desktop collection and temporary emulator reverse tunnels. It checks native Material navigation, clipboard paste/deduplication, standalone collections and cached media, live Camera2 frames, QR decoding at four rotations, pairing, selected-destination saves and saved-status updates. Desktop pagination/search, protected access, offline restart/retry, video playback/deletion and narrow/tablet/200% text layouts are covered by the same run. It preserves a readable clipboard value and removes its test app/tunnels afterward. `PAPAN_ANDROID_CAMERA_ONLY=1` skips clipboard checks.
+
+For a focused location-menu check, run this from the Android checkout after building the test APK:
+
+```sh
+PAPAN_ANDROID_SERIAL=emulator-5554 PAPAN_ADB=/path/to/adb npm run test:location-menu
+```
+
+This captures actual virtual-display animation frames and checks that the location menu reveals upward without covering its button. It also checks location choices, consistent dimensions/typography and dismissal at narrow, normal, tablet and enlarged-text sizes. Results are under `artifacts/android/location-menu/`; no phone or desktop receiver is needed.
 
 The unreleased 0.3.0 development pair was checked on 14 October 2026 using an isolated Android 16/API 36 x86_64 emulator and virtual display, against desktop source based on `beec3da`. Native checks cover local collection creation, cached images and actual video playback/deletion, pin edit/search, durable private storage, destination selection while desktop is offline, restart/retry without destination changes, protected cancel/wrong/correct passwords, an actual protected save and clearing contents after desktop lock. An 85-pin collection checks pagination, search beyond loaded pages, card recycling and position retention. Narrow phone, tablet, 200% font and keyboard layouts are also checked. Build tools are 35.0.0/JDK 21. See [verification](docs/verification.md) for exact evidence and limits.
 

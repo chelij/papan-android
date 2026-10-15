@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "build:android": "node scripts/build-android.mjs",
-    "check": "node --check scripts/build-android.mjs"
+    "check": "node --check scripts/build-android.mjs && node --check scripts/test-location-menu.mjs",
+    "test:location-menu": "node scripts/test-location-menu.mjs"
   },
   "license": "GPL-3.0-or-later",
   "author": "Cheliyono Jenardi",
