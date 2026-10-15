@@ -1,6 +1,6 @@
 # Mobile design delivery gate
 
-**PASS, 16 October 2026.** Direction: the user's mymind visual reference and Instagram Explore interaction reference, adjustable aligned desktop-style frames, lighter single-line captions, desktop green and native Android behavior. The current location is Phone, Desktop or Activity, shown on a tappable green button with only the other two locations in its menu. Picker labels share scalable Material Body Large typography and stable dimensions across locations. ENERGY **1**, RHYTHM **1**, MOTION **1**. Desktop runtime/protocol and stored data remain unchanged. [Implementation direction](mobile-design.md) and [native evidence/limits](verification.md#location-picker-consistency-16-october-2026).
+**PASS: menu reveal, 16 October 2026.** Direction: the user's mymind visual reference and Instagram Explore interaction reference, adjustable aligned desktop-style frames, lighter single-line captions, desktop green and native Android behavior. The current location is Phone, Desktop or Activity, shown on a tappable green button with only the other two locations in its menu. Picker labels share scalable Material Body Large typography and stable dimensions across locations. ENERGY **1**, RHYTHM **1**, MOTION **1**. The location menu reveals upward from behind its button and stays above it. This follow-up is verified only on an emulator; no personal phone was used. Desktop runtime/protocol and stored data remain unchanged. [Implementation direction](mobile-design.md) and [native evidence/limits](verification.md#location-menu-reveal-16-october-2026).
 
 This report covers the changed mobile interface. Native Material components provide the platform interaction patterns; Papan supplies its identity and content. A physical screen-reader/soft-keyboard session is still a device follow-up, not a claimed result.
 
@@ -8,7 +8,7 @@ This report covers the changed mobile interface. Native Material components prov
 | --- | --- |
 | R-01 | PASS: desktop-style continuous fading separates media from readable captions; the design note records the phone contrast adjustment. No solid caption block or decorative gradient/glow. |
 | R-02 | PASS: changed UI copy contains no em dashes. |
-| R-03 | PASS: native 300dp/640dp/200% layouts assert stable button/menu dimensions across all three locations, shared typography, 48dp targets, bottom-row alignment and scroll clearance; popup bounds fit the window. |
+| R-03 | PASS: focused and full native checks cover stable button/menu dimensions, shared typography, 48dp targets, bottom-row clearance and popup bounds at narrow/normal/tablet/200% text. Location popup bounds remain above its button. |
 | R-04 | PASS: licensed Material phone, desktop, history, search, add, close and play vectors identify real actions; the dropdown arrow comes from the existing Material library. Protected collections retain explicit text status. No new assets/dependencies. |
 | R-05 | PASS: the app-bar collection picker, media board, floating location/Add row, native menus, sheets and details serve distinct purposes. No marketing template. |
 | R-06 | PASS: native scalable sans-serif follows Android guidance and desktop's sans-serif identity. |
@@ -24,7 +24,7 @@ This report covers the changed mobile interface. Native Material components prov
 | R-16 | PASS: no AI marketing claims or buzzwords. |
 | R-17 | PASS: no invented statistics; documented bounds and test counts come from source/test output. |
 | R-18 | PASS: no testimonials or fictional people. |
-| R-19 | PASS: standard Material interaction motion only; no decorative entrance/loop animations. |
+| R-19 | PASS: the location menu uses native interactive reveal motion from the button edge; no decorative or looping animation. Compositor frames verify upward motion and the uncovered button. |
 | R-20 | PASS: notebook surfaces, desktop green, Papan wordmark, centered collection dropdown and touching aligned previews form the requested compact identity. |
 | R-21 | PASS: working Use phone setting/Light/Dark controls persist the choice and recreate the native Activity. |
 | R-22 | PASS: no generated illustrations. |
@@ -37,10 +37,10 @@ This report covers the changed mobile interface. Native Material components prov
 | R-29 | PASS: neutral notebook surfaces and one desktop green action accent define light/dark palettes; muted secondary navigation supports selection. |
 | R-30 | PASS: mymind styling and Explore viewing are requested references; Papan retains its wordmark, adjustable aligned frames, compact location/collection controls, green highlights and native Android interactions. |
 | R-31 | PASS: component purposes, spacing, typography, color and responsive behavior are documented in the design note. |
-| R-32 | PASS: actual first-arrow focus and subsequent arrows move the unselected alternative cursor without changing location. Tab/Enter/Back, separate focus highlights and current-button tapping pass. Prior zoom/seek/navigation alternatives remain valid. Native pointer checks use an unprotected fixture; protected Desktop tapping passes on Samsung. |
+| R-32 | PASS: full native keyboard focus/activation/dismissal and focused current-button tapping pass. Popup geometry excludes the button across every checked layout. Native pointer checks use unprotected fixtures; dated physical evidence remains historical and this follow-up used only the emulator. |
 | R-33 | PASS: Java/XML directly implement the interface; the build compiles that source without UI rewriting scripts. |
 | R-34 | PASS: Light/Dark/System controls, fresh theme initialization, restored selected collection/size, and readable toolbar icons pass native checks. |
-| R-35 | PASS: full Android 16/API 36 suite passes on private display 10, including all three locations at each window/font size and existing native flows. Signed normal/test builds share 41 classes/27 exact embedded files; installed Samsung bytes/data identity match. Unchanged desktop runtime reuses 71 unit groups/twelve receiver groups, native source/package and baseline three-OS CI evidence. |
+| R-35 | PASS: focused emulator display 6 records 13 compositor frames; full native suite passes on private display 10. Normal/test builds share 41 classes/27 Android files/43 exact total source files and verify v2/v3 against the retained installation certificate. Both runners reject physical targets before ADB. Desktop runtime retains its prior exact-runtime evidence. |
 | R-36 | PASS: trusted-LAN HTTP and capture limits are disclosed. No certification or performance claims. |
 | R-37 | PASS: accepted mymind/Explore references, adjustable aligned frames, gap-free pins, an app-bar collection dropdown, one bottom-left location button and green row highlights define the current direction. |
 | R-38 | PASS: normal APKs contain no seeded library or artwork. The optional native artwork check uses the existing credited desktop cache only in the disposable test package. |
@@ -52,6 +52,6 @@ This report covers the changed mobile interface. Native Material components prov
 | C-2 | PASS: every action family connects to implemented storage, navigation, media or receiver behavior. |
 | C-3 | PASS: each view supports collections, references, connections or pending delivery. |
 | C-4 | PASS: touching frames, header dropdown, stable location/button menus, shared typography, 48dp controls and dynamic bottom clearance fit narrow/tablet/200% layouts. Existing collection reorder, order/grants/media/cache/scroll/pagination/artwork/theme checks pass. |
-| C-5 | PASS: USB installation and physical cold-start/all-three-location/two-option-menu/stable-size/current-button checks pass, including protected Desktop prompting over Wi-Fi. Named APK rollback is retained and private test state cleaned. Physical protected-media/lifecycle/rearrangement, TalkBack/soft keyboard, optical QR, Android 8 and published-pair limits remain. |
+| C-5 | PASS: actual emulator compositor frames and native actions establish the reveal, uncovered button, choices, stable sizing/type and dismissal. Signed build/source checks pass. No personal-phone operation or installation is claimed for this follow-up; the preview is ready and documented device/platform limits remain. |
 
-The final native report records exact tested APK/provider hashes. `artifacts/android/location-picker-{report,instrumentation,integrity,contrast,phone-install,physical-lan,cleanup}.*` holds current evidence. Native board/viewer captures contain decoded pixels; popup captures draw settled native view trees. Ten control/focus contrast pairs meet AA, minimum 5.56:1. [Verification](verification.md#location-picker-consistency-16-october-2026) records exact builds, backups, fixture input limits and physical-versus-isolated scope. This gate verifies implementation and access; aesthetic acceptance remains the user's judgment.
+The exact APK/provider hashes are recorded in the full native report and focused `artifacts/android/location-menu/report.json`. `artifacts/android/menu-reveal-{report,instrumentation,integrity,target-guards,cleanup}.*` holds current evidence. Actual compositor animation captures and native window/video captures verify rendering; popup captures draw settled native trees. Prior AA palette/caption evidence remains valid. [Verification](verification.md#location-menu-reveal-16-october-2026) records builds, native frame scope and emulator-only limits. This gate verifies implementation and access; aesthetic acceptance remains the user's judgment.
