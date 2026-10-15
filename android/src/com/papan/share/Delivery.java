@@ -47,10 +47,14 @@ public final class Delivery {
         return request(endpoint, route, token, body, 10000);
     }
     static JSONObject request(String endpoint, String route, String token, JSONObject body, int timeout) throws Exception {
+        return request(endpoint, route, token, body, timeout, "");
+    }
+    static JSONObject request(String endpoint, String route, String token, JSONObject body, int timeout, String session) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new java.net.URL(endpoint + route).openConnection();
         connection.setConnectTimeout(Math.min(5000, timeout)); connection.setReadTimeout(timeout); connection.setInstanceFollowRedirects(false);
         connection.setRequestProperty("Accept", "application/json");
         if (!token.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + token);
+        if (!session.isEmpty()) connection.setRequestProperty("X-Papan-Session", session);
         try {
             if (body != null) {
                 connection.setRequestMethod("POST"); connection.setDoOutput(true); connection.setRequestProperty("Content-Type", "application/json");

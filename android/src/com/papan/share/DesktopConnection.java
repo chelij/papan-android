@@ -13,16 +13,22 @@ import javax.crypto.spec.SecretKeySpec;
 public final class DesktopConnection {
     private static long lastSearch;
     private static String lastServer = "";
+    private static String accessSession = java.util.UUID.randomUUID().toString();
+    static synchronized String sessionId() { return accessSession; }
+    static synchronized void closeSession(String session) { if (accessSession.equals(session)) accessSession = java.util.UUID.randomUUID().toString(); }
     public static JSONObject request(Context context, String route, JSONObject body) throws Exception {
+        return request(context, route, body, sessionId());
+    }
+    static JSONObject request(Context context, String route, JSONObject body, String session) throws Exception {
         JSONObject state = PhoneStore.get(context).snapshot();
         if (!state.has("config")) throw new Exception("Pair your desktop in Connections first.");
         JSONObject config = state.getJSONObject("config");
-        try { return Delivery.request(Delivery.endpoint(config.getString("endpoint")), route, config.getString("token"), body); }
+        try { return Delivery.request(Delivery.endpoint(config.getString("endpoint")), route, config.getString("token"), body, 10000, session); }
         catch (Exception error) {
             if (!(error.getCause() instanceof IOException) && !(error instanceof Delivery.RequestException && ((Delivery.RequestException)error).status == 401)) throw error;
             if (!recover(context, config)) throw error;
             JSONObject current = PhoneStore.get(context).snapshot().getJSONObject("config");
-            return Delivery.request(Delivery.endpoint(current.getString("endpoint")), route, current.getString("token"), body);
+            return Delivery.request(Delivery.endpoint(current.getString("endpoint")), route, current.getString("token"), body, 10000, session);
         }
     }
     private static synchronized boolean recover(Context context, JSONObject config) throws Exception {

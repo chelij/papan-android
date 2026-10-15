@@ -10,6 +10,7 @@ import java.net.URI;
 
 public final class DesktopLibrary {
     private final Context context;
+    private final String session = DesktopConnection.sessionId();
     public DesktopLibrary(Context context) { this.context = context.getApplicationContext(); }
     private JSONObject config() throws Exception {
         JSONObject state = PhoneStore.get(context).snapshot();
@@ -17,7 +18,7 @@ public final class DesktopLibrary {
         return state.getJSONObject("config");
     }
     public JSONObject request(String route, JSONObject body) throws Exception {
-        return DesktopConnection.request(context, route, body);
+        return DesktopConnection.request(context, route, body, session);
     }
     public boolean supported() throws Exception {
         try { return request("/v1/capabilities", null).optBoolean("selectedDestination"); }
@@ -49,12 +50,15 @@ public final class DesktopLibrary {
     }
     public void unlock(String id, String password) throws Exception { request("/v1/collections/" + id + "/unlock", new JSONObject().put("password", password)); }
     public void clear() { try { request("/v1/access/clear", new JSONObject()); } catch (Exception ignored) {} }
+    public void closeSession() { DesktopConnection.closeSession(session); }
+    public String sessionId() { return session; }
     public byte[] media(String value) throws Exception {
         JSONObject config = config(); String endpoint = Delivery.endpoint(config.getString("endpoint")); URI uri = new URI(value), base = new URI(endpoint);
         if (!base.getScheme().equals(uri.getScheme()) || !base.getAuthority().equals(uri.getAuthority()) || uri.getFragment() != null || !uri.getPath().matches("/v1/collections/[a-fA-F0-9-]{36}/pins/[a-fA-F0-9-]{36}/items/[a-fA-F0-9-]{36}/media") || !("variant=preview".equals(uri.getQuery()) || "variant=thumbnail".equals(uri.getQuery()))) throw new Exception("Invalid desktop media address.");
         HttpURLConnection connection = (HttpURLConnection) uri.toURL().openConnection();
         connection.setConnectTimeout(5000); connection.setReadTimeout(10000); connection.setInstanceFollowRedirects(false);
         connection.setRequestProperty("Authorization", "Bearer " + config.getString("token"));
+        connection.setRequestProperty("X-Papan-Session", session);
         try {
             if (connection.getResponseCode() != 200) throw new Exception("Preview is unavailable.");
             try (InputStream stream = connection.getInputStream(); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
@@ -67,6 +71,6 @@ public final class DesktopLibrary {
     public java.util.Map<String, String> videoHeaders(String value) throws Exception {
         JSONObject config = config(); URI uri = new URI(value), base = new URI(Delivery.endpoint(config.getString("endpoint")));
         if (!base.getScheme().equals(uri.getScheme()) || !base.getAuthority().equals(uri.getAuthority()) || uri.getFragment() != null || !uri.getPath().matches("/v1/collections/[a-fA-F0-9-]{36}/pins/[a-fA-F0-9-]{36}/items/[a-fA-F0-9-]{36}/media") || !("variant=preview".equals(uri.getQuery()) || "variant=original".equals(uri.getQuery()))) throw new Exception("Invalid desktop video address.");
-        return java.util.Collections.singletonMap("Authorization", "Bearer " + config.getString("token"));
+        java.util.Map<String, String> headers = new java.util.HashMap<>(); headers.put("Authorization", "Bearer " + config.getString("token")); headers.put("X-Papan-Session", session); return headers;
     }
 }
