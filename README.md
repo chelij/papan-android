@@ -2,6 +2,8 @@
 
 Keep reference collections on your phone, or browse and add to open collections in [Papan desktop](https://github.com/chelij/papan). The Android app combines soft notebook surfaces with standard Material 3 controls, desktop Papan's green accent and its aligned media board. Single-line titles and source websites sit inside each preview, using the desktop board's smooth fade and regular-weight labels. Tap a pin for full-screen viewing, swipe between pins, zoom images and play videos in place. Preview sizing is adjustable, and light/dark appearance follows your phone unless you choose otherwise. Phone collections work without pairing. Choose collections from the dropdown beside the Papan wordmark. One bottom-left button switches between On phone, Desktop and Activity on the same row as Add link. Pin rows and columns meet without gaps; Board appearance is in the app-bar menu. Choose a nearby desktop on the phone and approve its matching code on the computer; QR pairing remains available. No cloud account is needed.
 
+Collection and location dropdowns highlight the current row in green, with no selection checkbox.
+
 This mobile-board update is unreleased; the latest published Android APK remains 0.2.0. Build this checkout for the features described below.
 
 [Download the published APK](https://github.com/chelij/papan-android/releases/latest) · [Desktop downloads](https://github.com/chelij/papan/releases/latest) · [Local sharing protocol and troubleshooting](https://github.com/chelij/papan/blob/main/docs/mobile-sharing.md) · [Ecosystem and compatibility](https://github.com/chelij/papan/blob/main/docs/ecosystem.md)
