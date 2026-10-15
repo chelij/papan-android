@@ -51,7 +51,7 @@ public final class DesktopLibrary {
     public void clear() { try { request("/v1/access/clear", new JSONObject()); } catch (Exception ignored) {} }
     public byte[] media(String value) throws Exception {
         JSONObject config = config(); String endpoint = Delivery.endpoint(config.getString("endpoint")); URI uri = new URI(value), base = new URI(endpoint);
-        if (!base.getScheme().equals(uri.getScheme()) || !base.getAuthority().equals(uri.getAuthority()) || uri.getFragment() != null || !uri.getPath().matches("/v1/collections/[a-fA-F0-9-]{36}/pins/[a-fA-F0-9-]{36}/items/[a-fA-F0-9-]{36}/media") || !"variant=preview".equals(uri.getQuery())) throw new Exception("Invalid desktop media address.");
+        if (!base.getScheme().equals(uri.getScheme()) || !base.getAuthority().equals(uri.getAuthority()) || uri.getFragment() != null || !uri.getPath().matches("/v1/collections/[a-fA-F0-9-]{36}/pins/[a-fA-F0-9-]{36}/items/[a-fA-F0-9-]{36}/media") || !("variant=preview".equals(uri.getQuery()) || "variant=thumbnail".equals(uri.getQuery()))) throw new Exception("Invalid desktop media address.");
         HttpURLConnection connection = (HttpURLConnection) uri.toURL().openConnection();
         connection.setConnectTimeout(5000); connection.setReadTimeout(10000); connection.setInstanceFollowRedirects(false);
         connection.setRequestProperty("Authorization", "Bearer " + config.getString("token"));
