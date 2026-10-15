@@ -277,7 +277,11 @@ public final class MainActivity extends AppCompatActivity {
         popup.setAdapter(new android.widget.ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels) {
             @Override public View getView(int position, View reusable, ViewGroup parent) {
                 TextView row = (TextView)super.getView(position, reusable, parent); row.setTextSize(16); row.setMinHeight(dp(48)); row.setPaddingRelative(dp(16), dp(12), dp(16), dp(12)); row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setTextColor(position == selected ? getColor(R.color.papan_on_primary_container) : TEXT); row.setBackgroundColor(position == selected ? getColor(R.color.papan_primary_container) : Color.TRANSPARENT);
+                row.setTextColor(position == selected ? getColor(R.color.papan_on_primary_container) : TEXT);
+                int resting = position == selected ? getColor(R.color.papan_primary_container) : Color.TRANSPARENT, focused = position == selected ? resting : getColor(R.color.papan_secondary_container);
+                android.graphics.drawable.StateListDrawable background = new android.graphics.drawable.StateListDrawable();
+                for (int state : new int[] {android.R.attr.state_selected, android.R.attr.state_pressed, android.R.attr.state_hovered}) background.addState(new int[] {state}, new android.graphics.drawable.ColorDrawable(focused));
+                background.addState(new int[0], new android.graphics.drawable.ColorDrawable(resting)); row.setBackground(background);
                 android.graphics.drawable.Drawable icon = icons == null ? null : androidx.appcompat.content.res.AppCompatResources.getDrawable(MainActivity.this, icons[position]);
                 if (icon != null) { icon = icon.mutate(); icon.setTint(position == selected ? getColor(R.color.papan_on_primary_container) : MUTED); icon.setBounds(0, 0, dp(24), dp(24)); }
                 row.setCompoundDrawablesRelative(icon, null, null, null); row.setCompoundDrawablePadding(dp(12)); return row;
