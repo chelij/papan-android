@@ -11,7 +11,7 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.graphics.Insets;
 import androidx.appcompat.view.ContextThemeWrapper;
 import com.google.android.material.appbar.MaterialToolbar;
-import androidx.appcompat.widget.PopupMenu;
+import androidx.appcompat.widget.ListPopupWindow;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.textfield.TextInputLayout;
@@ -69,7 +69,7 @@ public final class MainActivity extends AppCompatActivity {
     private LinearLayout root, board;
     private MaterialButton collectionButton;
     private JSONArray collectionChoices = new JSONArray();
-    private PopupMenu collectionMenu, locationMenu;
+    private ListPopupWindow collectionMenu, locationMenu;
     private MaterialToolbar toolbar;
     private ExtendedFloatingActionButton locationButton;
     private FloatingActionButton addLink;
@@ -261,16 +261,30 @@ public final class MainActivity extends AppCompatActivity {
     private void receive(Intent intent) { if (Intent.ACTION_SEND.equals(intent.getAction()) && "text/plain".equals(intent.getType())) chooseDestination(intent.getStringExtra(Intent.EXTRA_TEXT)); else if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) pair(intent.getData().toString()); setIntent(new Intent(this, MainActivity.class).setAction(Intent.ACTION_MAIN)); }
     private void switchLocation(boolean desktopLocation) { showDestination(desktopLocation ? 2 : 1); }
     private void chooseLocation() {
-        locationMenu = new PopupMenu(this, locationButton); locationMenu.setForceShowIcon(true);
-        String[] labels = {"On phone", "Desktop", "Activity"}; int[] icons = {R.drawable.phone, R.drawable.desktop, R.drawable.history}; int selected = activityOpen ? 3 : remote ? 2 : 1;
-        for (int i = 0; i < labels.length; i++) locationMenu.getMenu().add(0, i + 1, i, labels[i]).setIcon(icons[i]).setCheckable(true).setChecked(i + 1 == selected);
-        locationMenu.setOnMenuItemClickListener(item -> { showDestination(item.getItemId()); return true; }); locationMenu.show();
+        locationMenu = picker(locationButton, new String[] {"On phone", "Desktop", "Activity"}, new int[] {R.drawable.phone, R.drawable.desktop, R.drawable.history}, activityOpen ? 2 : remote ? 1 : 0, position -> showDestination(position + 1));
     }
     private void chooseCollection() {
         if (activityOpen || collectionChoices.length() == 0) return;
-        JSONArray choices = collectionChoices; collectionMenu = new PopupMenu(this, collectionButton);
-        for (int i = 0; i < choices.length(); i++) { JSONObject value = choices.optJSONObject(i); if (value != null) collectionMenu.getMenu().add(0, i + 1, i, collectionLabel(value)).setCheckable(true).setChecked(value.optString("id").equals(remote ? selectedRemote : selectedLocal)); }
-        collectionMenu.setOnMenuItemClickListener(item -> { JSONObject value = choices.optJSONObject(item.getItemId() - 1); if (value == null) return false; search.setText(""); if (remote) { selectedRemote = value.optString("id"); loadDesktop(true, true); } else { selectedLocal = value.optString("id"); refreshLocal(); } return true; }); collectionMenu.show();
+        JSONArray choices = collectionChoices; String[] labels = new String[choices.length()]; int selected = 0;
+        for (int i = 0; i < choices.length(); i++) { JSONObject value = choices.optJSONObject(i); labels[i] = value == null ? "" : collectionLabel(value); if (value != null && value.optString("id").equals(remote ? selectedRemote : selectedLocal)) selected = i; }
+        collectionMenu = picker(collectionButton, labels, null, selected, position -> { JSONObject value = choices.optJSONObject(position); if (value == null) return; search.setText(""); if (remote) { selectedRemote = value.optString("id"); loadDesktop(true, true); } else { selectedLocal = value.optString("id"); refreshLocal(); } });
+    }
+    private ListPopupWindow picker(View anchor, String[] labels, int[] icons, int selected, java.util.function.IntConsumer choose) {
+        ListPopupWindow popup = new ListPopupWindow(this); popup.setAnchorView(anchor); popup.setModal(true); popup.setInputMethodMode(ListPopupWindow.INPUT_METHOD_NOT_NEEDED);
+        android.text.TextPaint measure = new android.text.TextPaint(); measure.setTextSize(16 * getResources().getDisplayMetrics().scaledDensity); int width = anchor.getWidth();
+        for (String label : labels) width = Math.max(width, (int)Math.ceil(measure.measureText(label)) + dp(icons == null ? 32 : 68));
+        popup.setWidth(Math.min(Math.min(dp(320), getResources().getDisplayMetrics().widthPixels - dp(32)), width));
+        popup.setAdapter(new android.widget.ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels) {
+            @Override public View getView(int position, View reusable, ViewGroup parent) {
+                TextView row = (TextView)super.getView(position, reusable, parent); row.setTextSize(16); row.setMinHeight(dp(48)); row.setPaddingRelative(dp(16), dp(12), dp(16), dp(12)); row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setTextColor(position == selected ? getColor(R.color.papan_on_primary_container) : TEXT); row.setBackgroundColor(position == selected ? getColor(R.color.papan_primary_container) : Color.TRANSPARENT);
+                android.graphics.drawable.Drawable icon = icons == null ? null : androidx.appcompat.content.res.AppCompatResources.getDrawable(MainActivity.this, icons[position]);
+                if (icon != null) { icon = icon.mutate(); icon.setTint(position == selected ? getColor(R.color.papan_on_primary_container) : MUTED); icon.setBounds(0, 0, dp(24), dp(24)); }
+                row.setCompoundDrawablesRelative(icon, null, null, null); row.setCompoundDrawablePadding(dp(12)); return row;
+            }
+        });
+        popup.setOnItemClickListener((parent, view, position, id) -> { popup.dismiss(); choose.accept(position); }); popup.show();
+        popup.getListView().setChoiceMode(android.widget.ListView.CHOICE_MODE_SINGLE); popup.getListView().setItemChecked(selected, true); popup.setSelection(selected); return popup;
     }
     private String collectionLabel(JSONObject value) { return value.optString("name") + (value.optBoolean("protected") ? " · protected" : ""); }
     private void showDestination(int id) {
