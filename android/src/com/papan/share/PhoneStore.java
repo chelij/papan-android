@@ -11,6 +11,7 @@ import java.util.UUID;
 
 // Only app-private storage is used; Android backups are disabled in the manifest.
 public final class PhoneStore {
+    public static final String PAIRING_PENDING = "Links are waiting for your paired desktop. It reconnects automatically on this network. Send or dismiss those links in Activity before pairing a different desktop.";
     private static PhoneStore instance;
     private final AtomicFile file;
     private JSONObject state;
@@ -48,12 +49,18 @@ public final class PhoneStore {
     }
     public synchronized void pair(JSONObject config) throws Exception {
         JSONObject next = snapshot();
-        if (next.has("config") && next.getJSONArray("entries").length() != 0) throw new Exception("Deliver or dismiss pending links before replacing your pairing. To reconnect to the same desktop, update its address instead.");
+        if (next.has("config") && next.getJSONArray("entries").length() != 0) throw new Exception(PAIRING_PENDING);
         next.put("config", config); commit(next);
     }
     public synchronized void endpoint(String endpoint) throws Exception {
         JSONObject next = snapshot(); if (!next.has("config")) throw new Exception("Pair a desktop first.");
         next.getJSONObject("config").put("endpoint", endpoint); commit(next);
+    }
+    public synchronized boolean reconnect(JSONObject paired, String endpoint) throws Exception {
+        JSONObject next = snapshot(), current = next.optJSONObject("config");
+        if (current == null || !current.optString("serverId").equals(paired.optString("serverId")) || !current.optString("deviceId").equals(paired.optString("deviceId")) || !current.optString("token").equals(paired.optString("token"))) return false;
+        if (!current.optString("endpoint").equals(paired.optString("endpoint"))) return current.optString("endpoint").equals(endpoint);
+        current.put("endpoint", Delivery.endpoint(endpoint)); commit(next); return true;
     }
     public synchronized void update(String id, boolean received, String status) throws Exception {
         JSONObject next = snapshot(); JSONArray entries = next.getJSONArray("entries");

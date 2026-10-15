@@ -86,7 +86,7 @@ public final class MainActivity extends AppCompatActivity {
     private boolean messagePending;
     private EditText search, pairLink, desktopAddress;
     private Dialog saveDialog;
-    private AlertDialog connectionsDialog, detailDialog, appearanceDialog;
+    private AlertDialog connectionsDialog, detailDialog, appearanceDialog, nearbyDialog;
     private VideoView video;
     private boolean remote, foreground, settingsOpen, activityOpen, updatingTabs;
     private String selectedLocal = "", selectedRemote = "", pendingLink, sharedId;
@@ -135,6 +135,7 @@ public final class MainActivity extends AppCompatActivity {
         if (video != null) { video.stopPlayback(); video = null; }
         if (detailDialog != null) detailDialog.dismiss();
         if (appearanceDialog != null) appearanceDialog.dismiss();
+        if (nearbyDialog != null) nearbyDialog.dismiss();
         remotePins = new JSONArray(); for (int i = 0; i < remoteCollections.length(); i++) { JSONObject value = remoteCollections.optJSONObject(i); if (value != null && value.optBoolean("protected")) try { value.put("locked", true); } catch (Exception ignored) {} }
         if (remote) { clearBoard(); board.addView(text("Desktop contents hidden while Papan is in the background.", 16)); }
         requests.execute(desktop::clear); super.onStop();
@@ -516,17 +517,19 @@ public final class MainActivity extends AppCompatActivity {
     }
     private void editPin(JSONObject pin) { LinearLayout body = dialogBody(); EditText title = field("Title", false), notes = field("Notes", true); title.setText(pin.optString("title")); notes.setText(pin.optString("notes")); addField(body, title); addField(body, notes); AlertDialog value = dialog("Edit phone pin", body); Button save = button("Save changes", () -> { try { MobileLibrary.get(this).edit(pin.getString("id"), title.getText().toString(), notes.getText().toString()); value.dismiss(); if (detailDialog != null) detailDialog.dismiss(); refreshLocal(); } catch (Exception error) { error(title, error.getMessage()); } }, true); body.addView(save); }
     private void connections() {
-        settingsOpen = true; LinearLayout body = dialogBody(); body.addView(text("On the desktop, open Receive from phone, enable the receiver and phone browsing, then choose Pair a phone.", 15));
+        settingsOpen = true; LinearLayout body = dialogBody(); body.addView(text("Enable Receive from phone on your computer. Pair desktop finds it nearby; approve the matching code there. Paired desktops reconnect automatically.", 15));
         connectionFeedback = text("", 14); connectionFeedback.setVisibility(View.GONE); connectionFeedback.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE); body.addView(connectionFeedback);
-        body.addView(button("Pair desktop", this::scanPair, true)); pairLink = field("Complete pairing link", false); pairLink.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI); addField(body, pairLink);
+        body.addView(button("Pair desktop", this::nearbyDesktops, true)); pairLink = field("Complete pairing link", false); pairLink.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI); addField(body, pairLink);
         pairLink.setText(pairingDraft); body.addView(button("Paste pairing link instead", () -> { String copied = clipboardText(); if (copied != null) { pairLink.setText(copied); pair(copied); } else message("Copy the complete desktop pairing link first."); }, false)); body.addView(button("Pair from link", () -> pair(pairLink.getText().toString()), false));
         try { JSONObject state = PhoneStore.get(this).snapshot(); if (state.has("config")) { EditText address = field("http://192.168.1.10:47778", false); desktopAddress = address; address.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI); address.setText(addressDraft.isEmpty() ? state.getJSONObject("config").optString("endpoint") : addressDraft); addField(body, address); body.addView(button("Update desktop address", () -> { try { PhoneStore.get(this).endpoint(Delivery.endpoint(address.getText().toString())); addressDraft = ""; remotePins = new JSONArray(); remoteCollections = new JSONArray(); message("Desktop address updated; queued destinations were kept."); sync(); if (remote) loadDesktop(false, true); } catch (Exception error) { error(address, error.getMessage()); } }, false)); } } catch (Exception error) { message(error.getMessage()); }
         body.addView(text("Desktop links, passwords and media use HTTP on your trusted local network. Phone collections and previews stay in app-private storage. Phone and desktop collections are separate. Pending deliveries survive restarts; Android controls background retry timing.", 13)); connectionsDialog = dialog("Connections", body); connectionsDialog.setOnDismissListener(d -> { settingsOpen = false; connectionsDialog = null; });
     }
-    private void scanPair() { try { JSONObject state = PhoneStore.get(this).snapshot(); if (state.has("config") && state.getJSONArray("entries").length() != 0) throw new Exception("Deliver or dismiss pending links before replacing your pairing. Update the desktop address to reconnect instead."); startActivityForResult(new Intent(this, ScanActivity.class), 1); } catch (Exception error) { message(error.getMessage()); } }
+    private void scanPair() { try { JSONObject state = PhoneStore.get(this).snapshot(); if (state.has("config") && state.getJSONArray("entries").length() != 0) throw new Exception(PhoneStore.PAIRING_PENDING); startActivityForResult(new Intent(this, ScanActivity.class), 1); } catch (Exception error) { message(error.getMessage()); } }
+    private void nearbyDesktops() { nearbyDialog = DesktopPairing.show(this, this::scanPair, this::paired); }
+    private void paired() { pairingDraft = ""; if (pairLink != null) pairLink.setText(""); if (nearbyDialog != null) nearbyDialog.dismiss(); if (connectionsDialog != null) connectionsDialog.dismiss(); message("Paired with Papan."); sync(); switchLocation(true); }
     @Override public void onActivityResult(int request, int result, Intent data) { super.onActivityResult(request, result, data); if (request == 1 && result == RESULT_OK && data != null) pair(data.getStringExtra("pairingLink")); else if (request == 1) message("Pairing cancelled. Your existing pairing was kept."); }
     private void pair(String value) {
-        message("Pairing…"); async(() -> { JSONObject before = PhoneStore.get(this).snapshot(); if (before.has("config") && before.getJSONArray("entries").length() != 0) throw new Exception("Deliver or dismiss pending links before replacing your pairing. Update the desktop address to reconnect instead."); String name = Build.MANUFACTURER + " " + Build.MODEL; PhoneStore.get(this).pair(Delivery.pair(value, name.substring(0, Math.min(80, name.length())))); }, () -> { pairingDraft = ""; if (pairLink != null) pairLink.setText(""); if (connectionsDialog != null) connectionsDialog.dismiss(); message("Paired with Papan."); sync(); switchLocation(true); });
+        message("Pairing…"); async(() -> { JSONObject before = PhoneStore.get(this).snapshot(); if (before.has("config") && before.getJSONArray("entries").length() != 0) throw new Exception(PhoneStore.PAIRING_PENDING); String name = Build.MANUFACTURER + " " + Build.MODEL; PhoneStore.get(this).pair(Delivery.pair(value, name.substring(0, Math.min(80, name.length())))); }, this::paired);
     }
     private void sync() {
         if (!syncing.compareAndSet(false, true)) return;

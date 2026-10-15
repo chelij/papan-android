@@ -44,8 +44,11 @@ public final class Delivery {
         return config;
     }
     public static JSONObject request(String endpoint, String route, String token, JSONObject body) throws Exception {
+        return request(endpoint, route, token, body, 10000);
+    }
+    static JSONObject request(String endpoint, String route, String token, JSONObject body, int timeout) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new java.net.URL(endpoint + route).openConnection();
-        connection.setConnectTimeout(5000); connection.setReadTimeout(10000); connection.setInstanceFollowRedirects(false);
+        connection.setConnectTimeout(Math.min(5000, timeout)); connection.setReadTimeout(timeout); connection.setInstanceFollowRedirects(false);
         connection.setRequestProperty("Accept", "application/json");
         if (!token.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + token);
         try {
@@ -77,14 +80,13 @@ public final class Delivery {
         try {
             PhoneStore store = PhoneStore.get(context); JSONObject state = store.snapshot();
             if (!state.has("config")) return false;
-            JSONObject config = state.getJSONObject("config"); JSONArray entries = state.getJSONArray("entries");
-            String endpoint = endpoint(config.getString("endpoint")), token = config.getString("token");
+            JSONArray entries = state.getJSONArray("entries");
             for (int i = 0; i < entries.length() && !cancelled.get(); i++) {
                 JSONObject entry = entries.getJSONObject(i); String id = entry.getString("id"); boolean received = entry.optBoolean("received");
                 try {
                     JSONObject payload = new JSONObject().put("id", id).put("url", entry.getString("url"));
                     if (entry.has("collectionId")) payload.put("collectionId", entry.getString("collectionId"));
-                    JSONObject receipt = request(endpoint, received ? "/v1/shares/" + id : "/v1/shares", token,
+                    JSONObject receipt = DesktopConnection.request(context, received ? "/v1/shares/" + id : "/v1/shares",
                         received ? null : payload);
                     if (!receipt.getString("id").equals(id) || !receipt.optBoolean("received")) throw new Exception("Invalid share receipt.");
                     if ("saved".equals(receipt.getString("state"))) store.remove(id, true);

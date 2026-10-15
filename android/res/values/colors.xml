@@ -1,8 +1,8 @@
 <resources>
-  <color name="papan_primary">#A43D16</color>
+  <color name="papan_primary">#46662D</color>
   <color name="papan_on_primary">#FFFFFF</color>
-  <color name="papan_primary_container">#FFDBCA</color>
-  <color name="papan_on_primary_container">#57210B</color>
+  <color name="papan_primary_container">#D0F5AD</color>
+  <color name="papan_on_primary_container">#203509</color>
   <color name="papan_secondary">#5D6658</color>
   <color name="papan_on_secondary">#FFFFFF</color>
   <color name="papan_secondary_container">#E2E7DA</color>
