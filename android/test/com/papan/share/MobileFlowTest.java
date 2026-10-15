@@ -109,6 +109,7 @@ public final class MobileFlowTest extends Instrumentation {
             ActivityMonitor monitor = addMonitor(ScanActivity.class.getName(), null, false);
             click(main, "Connections");
             click(main, "Pair desktop");
+            click(main, "Scan QR");
             scan = (ScanActivity)waitForMonitorWithTimeout(monitor, 10000); removeMonitor(monitor);
             require(scan != null && scan.getDisplay().getDisplayId() == displayId, "Pair desktop did not open the scanner on the isolated display.");
             await(() -> ((Long)field(scan, "lastFrame")) > 0 && text(scan).contains("Looking for Papan"), 10000, "The scanner did not receive live camera frames.");
@@ -137,11 +138,12 @@ public final class MobileFlowTest extends Instrumentation {
             JSONObject before = PhoneStore.get(main).snapshot();
             if (!cameraOnly) { clip("no link here"); click(main, "Paste link"); require(((TextView)field(main, "status")).getText().toString().contains("No web link was found") && PhoneStore.get(main).snapshot().getJSONArray("entries").length() == 0, "Invalid clipboard contents queued a link."); }
             require(before.getJSONObject("config").toString().equals(PhoneStore.get(main).snapshot().getJSONObject("config").toString()), "Clipboard paste changed the pairing.");
-            if (!cameraOnly) connectionFeedback(url, "connections-feedback.png");
+            if (!cameraOnly) { nearbyPairing(); connectionFeedback(url, "connections-feedback.png"); }
             if (!cameraOnly && arguments.getString("controlEndpoint") != null) remoteBoards(url);
             if (!cameraOnly) { localVideo(url); collectionControls(url); responsive(); connectionFeedback(url, "connections-large-text.png"); }
             if (!cameraOnly && new File(getTargetContext().getFilesDir(), "style-demo.json").exists()) styleBoard();
-            result.putString("checks", "Virtual-display UI; " + (cameraOnly ? "share intent queues and deduplicates (clipboard skipped); " : "native phone collection creation; local image capture/decoded preview; per-collection paste/deduplication; pin edit/search; private storage reopen; Paste link reads clipboard and chooses destination; ") + "Pair desktop immediately opens Camera2 and receives frames; invalid pairing stays in scanner; QR decoding at all four rotations; QR result pairs actual receiver; queued link saves and foreground status updates; pairing preserved; open desktop boards; selected destination retained across offline storage/activity restart; newest-first desktop pagination preserved on refresh and search beyond loaded pages; protected password/cancel/wrong/correct access and desktop lock clear contents.");
+            result.putString("checks", "Virtual-display UI; " + (cameraOnly ? "share intent queues and deduplicates (clipboard skipped); " : "native phone collection creation; local image capture/decoded preview; per-collection paste/deduplication; pin edit/search; private storage reopen; Paste link reads clipboard and chooses destination; ") + "Scan QR opens Camera2 and receives frames; invalid pairing stays in scanner; QR decoding at all four rotations; QR result pairs actual receiver; queued link saves and foreground status updates; pairing preserved; open desktop boards; selected destination retained across offline storage/activity restart; newest-first desktop pagination preserved on refresh and search beyond loaded pages; protected password/cancel/wrong/correct access and desktop lock clear contents.");
+            if (!cameraOnly) result.putString("checks", result.getString("checks") + " Native DNS-SD nearby desktop discovery; phone-initiated request and displayed six-digit code; desktop approval pairs without QR; authenticated automatic endpoint change preserves the pairing token, request ID and chosen destination; wrong-key identity proof is rejected.");
             if (!cameraOnly) result.putString("checks", result.getString("checks") + " Direct MP4 capture/native playback/deletion; collection rename/delete/cancel and form validation; add/share sheet cancellation; failed capture/retry preserves the link; source browser intent; pairing/address recovery controls; inline accessible Connections feedback, repeated pending-link warning and preserved destinations/key; no snackbar behind a modal, deferred board feedback after dismissal; keyboard focus; 300dp phone, 640dp tablet and 200% font reflow; Material bottom navigation/rail and Add link meet 48dp touch targets and remain inside the isolated window.");
             if (!cameraOnly && new File(getTargetContext().getFilesDir(), "style-demo.json").exists()) result.putString("checks", result.getString("checks") + " Credited artwork board: equal card bounds and aligned rows/columns at three preview sizes; real slider keyboard input; collection-specific sizing persists across fresh activity; fill/whole-image control; light/dark/system appearance controls; native screenshots with decoded real artworks.");
             if (!cameraOnly) { result.putDouble("captionTitleContrast", captionTitleContrast); result.putDouble("captionSourceContrast", captionSourceContrast); result.putString("checks", result.getString("checks") + " Desktop-style captions: single-line title/source, no solid caption block, continuous rendered fade with AA contrast at every text row over pure white, full labels retained for details/accessibility."); }
@@ -199,9 +201,9 @@ public final class MobileFlowTest extends Instrumentation {
         store.endpoint("http://127.0.0.1:65534");
         String queued = store.enqueue(url + "?pending-dialog", "11111111-1111-1111-1111-111111111111", "Pending dialog check");
         JSONObject entry = store.snapshot().getJSONArray("entries").getJSONObject(0);
-        String warning = "Deliver or dismiss pending links before replacing your pairing. Update the desktop address to reconnect instead.";
+        String warning = "Links are waiting for your paired desktop. It reconnects automatically on this network. Send or dismiss those links in Activity before pairing a different desktop.";
         try {
-            click(main, "Connections"); click(main, "Pair desktop");
+            click(main, "Connections"); click(main, "Pair desktop"); click(main, "Scan QR");
             await(() -> has(warning), 5000, "Pairing warning was hidden behind Connections.");
             await(() -> { TextView feedback = (TextView)field(main, "connectionFeedback"); android.graphics.Rect visible = new android.graphics.Rect(); return feedback.getGlobalVisibleRect(visible) && visible.height() >= feedback.getHeight(); }, 3000, "Connection warning did not scroll into view.");
             screenshot(main, ((android.app.Dialog)field(main, "connectionsDialog")).getWindow(), capture);
@@ -212,8 +214,8 @@ public final class MobileFlowTest extends Instrumentation {
                 View background = main.getWindow().getDecorView().findViewById(com.google.android.material.R.id.snackbar_text);
                 require(background == null || !background.isShown(), "A snackbar remained behind the open Connections window.");
             });
-            click(main, "Close"); click(main, "Connections"); click(main, "Pair desktop");
-            require(has(warning), "Reopening Connections hid the repeated pending-link warning.");
+            click(main, "Close"); click(main, "Connections"); click(main, "Pair desktop"); click(main, "Scan QR");
+            await(() -> has(warning), 5000, "Reopening Connections hid the repeated pending-link warning.");
             input("http://192.168.1.10:47778", "http://127.0.0.1:65534"); click(main, "Update desktop address");
             await(() -> has("Desktop address updated; queued destinations were kept."), 3000, "Address confirmation was hidden behind Connections.");
             JSONObject kept = store.snapshot().getJSONArray("entries").getJSONObject(0);
@@ -228,7 +230,40 @@ public final class MobileFlowTest extends Instrumentation {
             await(() -> has(((TextView)field(main, "status")).getText().toString()), 3000, "Deferred share error was lost when the form closed.");
         } finally {
             onMain(() -> { try { android.app.Dialog dialog = (android.app.Dialog)field(main, "connectionsDialog"); if (dialog != null) dialog.dismiss(); } catch (Exception error) { throw new RuntimeException(error); } });
-            await(() -> !busy(), 5000, "Connection check delivery did not settle."); store.remove(queued, false); store.endpoint(config.getString("endpoint"));
+            await(() -> !busy(), 15000, "Connection check delivery did not settle."); store.remove(queued, false); store.endpoint(config.getString("endpoint"));
+        }
+    }
+    private android.net.nsd.NsdManager.RegistrationListener advertise(String serverId, String endpoint, String name) throws Exception {
+        android.net.nsd.NsdManager nsd = (android.net.nsd.NsdManager)main.getSystemService(Context.NSD_SERVICE);
+        android.net.nsd.NsdServiceInfo info = new android.net.nsd.NsdServiceInfo(); info.setServiceName("Papan " + serverId); info.setServiceType(DesktopDiscovery.TYPE); info.setPort(java.net.URI.create(endpoint).getPort());
+        info.setAttribute("id", serverId); info.setAttribute("endpoint", endpoint); info.setAttribute("name", name); info.setAttribute("version", "1");
+        java.util.concurrent.CountDownLatch registered = new java.util.concurrent.CountDownLatch(1); boolean[] success = new boolean[1];
+        android.net.nsd.NsdManager.RegistrationListener listener = new android.net.nsd.NsdManager.RegistrationListener() {
+            public void onServiceRegistered(android.net.nsd.NsdServiceInfo service) { success[0] = true; registered.countDown(); }
+            public void onRegistrationFailed(android.net.nsd.NsdServiceInfo service, int error) { registered.countDown(); }
+            public void onServiceUnregistered(android.net.nsd.NsdServiceInfo service) {}
+            public void onUnregistrationFailed(android.net.nsd.NsdServiceInfo service, int error) {}
+        };
+        nsd.registerService(info, android.net.nsd.NsdManager.PROTOCOL_DNS_SD, listener);
+        require(registered.await(10000, java.util.concurrent.TimeUnit.MILLISECONDS) && success[0], "Native DNS-SD fixture did not register."); return listener;
+    }
+    private void nearbyPairing() throws Exception {
+        JSONObject original = PhoneStore.get(main).snapshot().getJSONObject("config");
+        android.net.nsd.NsdManager.RegistrationListener announcement = advertise(arguments.getString("pairServerId"), arguments.getString("pairEndpoint"), "Nearby test desktop");
+        try {
+            click(main, "Connections"); click(main, "Pair desktop");
+            await(() -> has("Pair · Nearby test desktop"), 15000, "Nearby desktop was not discovered/resolved by Android DNS-SD.");
+            click(main, "Pair · Nearby test desktop");
+            await(() -> has("Approve this matching code in Papan on Nearby test desktop."), 10000, "Phone did not request desktop approval and display its code.");
+            screenshot(main, ((android.app.Dialog)field(main, "nearbyDialog")).getWindow(), "nearby-pairing.png");
+            require(original.getString("token").equals(PhoneStore.get(main).snapshot().getJSONObject("config").getString("token")), "Unapproved desktop replaced the existing pairing.");
+            control("approve-pairing");
+            await(() -> main.hasWindowFocus() && arguments.getString("pairServerId").equals(PhoneStore.get(main).snapshot().getJSONObject("config").getString("serverId")), 10000, "Approved desktop did not pair from the phone without a QR code.");
+            await(() -> has("Nearby inbox"), 10000, "Phone-initiated pairing did not browse the selected desktop.");
+            click(main, "On phone");
+        } finally {
+            ((android.net.nsd.NsdManager)main.getSystemService(Context.NSD_SERVICE)).unregisterService(announcement);
+            PhoneStore.get(main).pair(original);
         }
     }
     private void collectionControls(String url) throws Exception {
@@ -329,7 +364,7 @@ public final class MobileFlowTest extends Instrumentation {
         await(() -> main != beforeDark && main.hasWindowFocus() && (main.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES && hasImage(main.getWindow().getDecorView()), 10000, "Dark appearance did not recreate correctly.");
         require(main.getDisplay().getDisplayId() == displayId, "Theme change left the isolated display."); alignedBoard(); screenshot(main, "style-dark.png");
         ActivityMonitor darkScanner = addMonitor(ScanActivity.class.getName(), null, false);
-        try { click(main, "Connections"); click(main, "Pair desktop"); await(() -> darkScanner.getLastActivity() != null && darkScanner.getLastActivity().hasWindowFocus(), 5000, "Dark pairing screen did not open."); Activity scanner = darkScanner.getLastActivity(); require(scanner.getDisplay().getDisplayId() == displayId && (scanner.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES, "Pairing screen did not inherit the selected appearance."); click(scanner, "Cancel"); } finally { removeMonitor(darkScanner); }
+        try { click(main, "Connections"); click(main, "Pair desktop"); click(main, "Scan QR"); await(() -> darkScanner.getLastActivity() != null && darkScanner.getLastActivity().hasWindowFocus(), 5000, "Dark pairing screen did not open."); Activity scanner = darkScanner.getLastActivity(); require(scanner.getDisplay().getDisplayId() == displayId && (scanner.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES, "Pairing screen did not inherit the selected appearance."); click(scanner, "Cancel"); } finally { removeMonitor(darkScanner); }
         click(main, "Close");
         click(main, "Board appearance"); MainActivity beforeLight = main; click(main, "Light"); await(() -> main != beforeLight && main.hasWindowFocus() && (main.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_NO && hasImage(main.getWindow().getDecorView()), 10000, "Light appearance did not recreate correctly.");
         alignedBoard(); screenshot(main, "style-light.png");
@@ -407,8 +442,21 @@ public final class MobileFlowTest extends Instrumentation {
         main = (MainActivity)startActivitySync(new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), ActivityOptions.makeBasic().setLaunchDisplayId(displayId).toBundle());
         require(main.getDisplay().getDisplayId() == displayId, "Restart opened on physical display."); await(() -> main.hasWindowFocus() && !busy(), 15000, "Restart did not settle.");
         JSONObject reopened = PhoneStore.get(main).snapshot().getJSONArray("entries").getJSONObject(0); require(requestId.equals(reopened.getString("id")) && destination.equals(reopened.getString("collectionId")), "Restart changed request identity/destination.");
-        control("enable"); click(main, "Activity"); click(main, "Send pending / check saves");
-        await(() -> PhoneStore.get(main).snapshot().getJSONArray("entries").length() == 0, 20000, "Chosen desktop collection did not save after restart."); click(main, "On phone");
+        JSONObject paired = PhoneStore.get(main).snapshot().getJSONObject("config");
+        control("move"); android.net.nsd.NsdManager.RegistrationListener announcement = advertise(paired.getString("serverId"), arguments.getString("reconnectEndpoint"), "Moved test desktop");
+        try {
+            JSONObject wrong = new JSONObject(paired.toString()).put("token", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+            require(!DesktopConnection.reconnect(main, wrong, arguments.getString("reconnectEndpoint")), "A wrong key accepted the desktop identity proof.");
+            require(paired.getString("endpoint").equals(PhoneStore.get(main).snapshot().getJSONObject("config").getString("endpoint")), "Rejected proof changed the saved address.");
+            PhoneStore.get(main).endpoint("http://127.0.0.1:65533");
+            require(!PhoneStore.get(main).reconnect(paired, arguments.getString("reconnectEndpoint")) && "http://127.0.0.1:65533".equals(PhoneStore.get(main).snapshot().getJSONObject("config").getString("endpoint")), "An older discovery result overwrote a newer manual address.");
+            PhoneStore.get(main).endpoint(paired.getString("endpoint"));
+            click(main, "Activity"); click(main, "Send pending / check saves");
+            await(() -> PhoneStore.get(main).snapshot().getJSONArray("entries").length() == 0, 30000, "Chosen desktop collection did not reconnect and save after its endpoint changed.");
+            JSONObject reconnected = PhoneStore.get(main).snapshot().getJSONObject("config");
+            require(arguments.getString("reconnectEndpoint").equals(reconnected.getString("endpoint")) && paired.getString("token").equals(reconnected.getString("token")) && paired.getString("deviceId").equals(reconnected.getString("deviceId")), "Automatic reconnect changed the pairing instead of its address.");
+        } finally { ((android.net.nsd.NsdManager)main.getSystemService(Context.NSD_SERVICE)).unregisterService(announcement); }
+        click(main, "On phone");
         click(main, "Desktop"); await(() -> has("Android chosen"), 10000, "Desktop did not reconnect."); click(main, "Android chosen");
         await(() -> ((org.json.JSONArray)field(main, "remotePins")).length() == 1 && hasImage(main.getWindow().getDecorView()), 10000, "Chosen desktop board did not decode saved media."); alignedBoard(); screenshot(main, "remote.png");
         input("Search this collection", "absent reference"); await(() -> text(main).contains("No matching pins."), 10000, "Desktop search did not filter on the server."); input("Search this collection", "wide"); await(() -> ((org.json.JSONArray)field(main, "remotePins")).length() == 1, 10000, "Desktop search did not find saved content."); input("Search this collection", ""); await(() -> has("Protected test · protected"), 10000, "Collection tabs did not settle after search.");

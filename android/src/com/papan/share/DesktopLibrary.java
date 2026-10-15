@@ -17,7 +17,7 @@ public final class DesktopLibrary {
         return state.getJSONObject("config");
     }
     public JSONObject request(String route, JSONObject body) throws Exception {
-        JSONObject config = config(); return Delivery.request(Delivery.endpoint(config.getString("endpoint")), route, config.getString("token"), body);
+        return DesktopConnection.request(context, route, body);
     }
     public boolean supported() throws Exception {
         try { return request("/v1/capabilities", null).optBoolean("selectedDestination"); }
