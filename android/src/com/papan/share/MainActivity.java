@@ -65,6 +65,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MainActivity extends AppCompatActivity {
+    private static final String[] LOCATION_LABELS = {"Phone", "Desktop", "Activity"};
+    private static final int[] LOCATION_ICONS = {R.drawable.phone, R.drawable.desktop, R.drawable.history};
     private int TEXT, MUTED, ACCENT;
     private LinearLayout root, board;
     private MaterialButton collectionButton;
@@ -164,7 +166,7 @@ public final class MainActivity extends AppCompatActivity {
         });
         toolbar = new MaterialToolbar(this); toolbar.setTouchscreenBlocksFocus(false); toolbar.setContentInsetsRelative(dp(12), dp(8)); toolbar.setBackgroundColor(getColor(R.color.papan_background)); root.addView(toolbar, new LinearLayout.LayoutParams(-1, -2));
         LinearLayout identity = row(); TextView brand = new TextView(this); brand.setText("papan."); brand.setTextAppearance(this, R.style.PapanBrand); brand.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 23); brand.setTextColor(TEXT); brand.setContentDescription("Papan"); identity.addView(brand);
-        collectionButton = new MaterialButton(new ContextThemeWrapper(this, R.style.PapanTextButtonOverlay)); collectionButton.setAllCaps(false); collectionButton.setSingleLine(true); collectionButton.setEllipsize(android.text.TextUtils.TruncateAt.END); collectionButton.setMinWidth(dp(48)); collectionButton.setMinimumWidth(dp(48)); collectionButton.setMinHeight(dp(48)); collectionButton.setMinimumHeight(dp(48)); collectionButton.setInsetTop(0); collectionButton.setInsetBottom(0); collectionButton.setPaddingRelative(dp(8), 0, dp(4), 0); collectionButton.setIconResource(com.google.android.material.R.drawable.mtrl_ic_arrow_drop_down); collectionButton.setIconGravity(MaterialButton.ICON_GRAVITY_END); collectionButton.setIconPadding(dp(4)); collectionButton.setIconSize(dp(24)); collectionButton.setTextColor(TEXT); collectionButton.setIconTint(ColorStateList.valueOf(MUTED)); collectionButton.setOnClickListener(v -> chooseCollection()); identity.addView(collectionButton, new LinearLayout.LayoutParams(0, -2, 1));
+        collectionButton = new MaterialButton(new ContextThemeWrapper(this, R.style.PapanTextButtonOverlay)); collectionButton.setTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodyLarge); collectionButton.setAllCaps(false); collectionButton.setSingleLine(true); collectionButton.setEllipsize(android.text.TextUtils.TruncateAt.END); collectionButton.setMinWidth(dp(48)); collectionButton.setMinimumWidth(dp(48)); collectionButton.setMinHeight(dp(48)); collectionButton.setMinimumHeight(dp(48)); collectionButton.setInsetTop(0); collectionButton.setInsetBottom(0); collectionButton.setPaddingRelative(dp(8), 0, dp(4), 0); collectionButton.setIconResource(com.google.android.material.R.drawable.mtrl_ic_arrow_drop_down); collectionButton.setIconGravity(MaterialButton.ICON_GRAVITY_END); collectionButton.setIconPadding(dp(4)); collectionButton.setIconSize(dp(24)); collectionButton.setTextColor(TEXT); collectionButton.setIconTint(ColorStateList.valueOf(MUTED)); collectionButton.setOnClickListener(v -> chooseCollection()); identity.addView(collectionButton, new LinearLayout.LayoutParams(0, -2, 1));
         toolbar.addView(identity, new androidx.appcompat.widget.Toolbar.LayoutParams(-1, -2, Gravity.START | Gravity.CENTER_VERTICAL));
         toolbar.getMenu().add(0, 107, 0, "Search").setIcon(R.drawable.search).setShowAsAction(getResources().getConfiguration().fontScale > 1.5f ? android.view.MenuItem.SHOW_AS_ACTION_NEVER : android.view.MenuItem.SHOW_AS_ACTION_ALWAYS);
         toolbar.getMenu().add(0, 108, 1, "Board appearance").setIcon(R.drawable.tune).setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER);
@@ -200,10 +202,10 @@ public final class MainActivity extends AppCompatActivity {
         pinGrid = new RecyclerView(this); pinGrid.setPadding(dp(10), dp(4), dp(10), dp(88)); pinGrid.setClipToPadding(false); pinGrid.setHasFixedSize(true); pinGrid.setItemAnimator(null); pinGrid.setVisibility(View.GONE); canvas.addView(pinGrid, new FrameLayout.LayoutParams(-1, -1));
         pinGrid.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> { if (right - left != oldRight - oldLeft && pinGrid.getAdapter() != null) pinGrid.post(this::renderPins); });
         LinearLayout actions = row(); actions.setPadding(dp(16), dp(8), dp(16), dp(16)); canvas.addView(actions, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
-        locationButton = new ExtendedFloatingActionButton(this); locationButton.setSingleLine(true); locationButton.setEllipsize(android.text.TextUtils.TruncateAt.END); locationButton.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.papan_surface))); locationButton.setTextColor(TEXT); locationButton.setIconTint(ColorStateList.valueOf(ACCENT)); locationButton.setOnClickListener(v -> chooseLocation()); actions.addView(locationButton, new LinearLayout.LayoutParams(-2, -2));
+        locationButton = new ExtendedFloatingActionButton(this); locationButton.setTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodyLarge); locationButton.setSingleLine(true); locationButton.setEllipsize(android.text.TextUtils.TruncateAt.END); locationButton.setMinHeight(dp(56)); locationButton.setMinimumHeight(dp(56)); locationButton.setPaddingRelative(dp(16), locationButton.getPaddingTop(), dp(16), locationButton.getPaddingBottom()); locationButton.setIconSize(dp(24)); locationButton.setIconPadding(dp(12)); locationButton.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.papan_primary_container))); locationButton.setTextColor(getColor(R.color.papan_on_primary_container)); locationButton.setIconTint(ColorStateList.valueOf(getColor(R.color.papan_on_primary_container))); locationButton.setOnClickListener(v -> chooseLocation()); actions.addView(locationButton, new LinearLayout.LayoutParams(-2, -2));
         View flexible = new View(this); actions.addView(flexible, new LinearLayout.LayoutParams(dp(12), 0, 1));
         addLink = new FloatingActionButton(this); addLink.setImageResource(R.drawable.add); addLink.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); addLink.setImageTintList(ColorStateList.valueOf(getColor(R.color.papan_on_primary))); addLink.setContentDescription("Add link"); addLink.setOnClickListener(v -> enterLink()); actions.addView(addLink, new LinearLayout.LayoutParams(dp(56), dp(56)));
-        actions.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> { int maximum = Math.max(dp(48), right - left - dp(32 + 56 + 12)); if (locationButton.getMaxWidth() != maximum) locationButton.setMaxWidth(maximum); });
+        actions.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> { int width = 0; for (String label : LOCATION_LABELS) width = Math.max(width, (int)Math.ceil(locationButton.getPaint().measureText(label))); width += locationButton.getPaddingStart() + locationButton.getPaddingEnd() + locationButton.getIconSize() + locationButton.getIconPadding(); width = Math.min(width, Math.max(dp(48), right - left - dp(32 + 56 + 12))); if (locationButton.getMaxWidth() != width || locationButton.getMinWidth() != width) locationButton.setWidth(width); int clearance = Math.max(dp(88), bottom - top + dp(8)); if (pinGrid.getPaddingBottom() != clearance) pinGrid.setPadding(pinGrid.getPaddingLeft(), pinGrid.getPaddingTop(), pinGrid.getPaddingRight(), clearance); if (board.getPaddingBottom() != Math.max(dp(104), clearance)) board.setPadding(board.getPaddingLeft(), board.getPaddingTop(), board.getPaddingRight(), Math.max(dp(104), clearance)); });
         status = text("", 14); status.setVisibility(View.GONE); root.addView(status);
         updateChrome();
     }
@@ -260,8 +262,11 @@ public final class MainActivity extends AppCompatActivity {
     private String clipboardText() { ClipData data = ((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).getPrimaryClip(); if (data == null || data.getItemCount() == 0) return null; ClipData.Item value = data.getItemAt(0); return value.getText() != null ? value.getText().toString() : value.getUri() != null ? value.getUri().toString() : null; }
     private void receive(Intent intent) { if (Intent.ACTION_SEND.equals(intent.getAction()) && "text/plain".equals(intent.getType())) chooseDestination(intent.getStringExtra(Intent.EXTRA_TEXT)); else if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) pair(intent.getData().toString()); setIntent(new Intent(this, MainActivity.class).setAction(Intent.ACTION_MAIN)); }
     private void switchLocation(boolean desktopLocation) { showDestination(desktopLocation ? 2 : 1); }
+    private int locationIndex() { return activityOpen ? 2 : remote ? 1 : 0; }
     private void chooseLocation() {
-        locationMenu = picker(locationButton, new String[] {"On phone", "Desktop", "Activity"}, new int[] {R.drawable.phone, R.drawable.desktop, R.drawable.history}, activityOpen ? 2 : remote ? 1 : 0, position -> showDestination(position + 1));
+        String[] labels = new String[2]; int[] icons = new int[2], destinations = new int[2];
+        for (int i = 0, entry = 0; i < LOCATION_LABELS.length; i++) if (i != locationIndex()) { labels[entry] = LOCATION_LABELS[i]; icons[entry] = LOCATION_ICONS[i]; destinations[entry++] = i + 1; }
+        locationMenu = picker(locationButton, labels, icons, -1, position -> showDestination(destinations[position]));
     }
     private void chooseCollection() {
         if (activityOpen || collectionChoices.length() == 0) return;
@@ -271,12 +276,12 @@ public final class MainActivity extends AppCompatActivity {
     }
     private ListPopupWindow picker(View anchor, String[] labels, int[] icons, int selected, java.util.function.IntConsumer choose) {
         ListPopupWindow popup = new ListPopupWindow(this); popup.setAnchorView(anchor); popup.setModal(true); popup.setInputMethodMode(ListPopupWindow.INPUT_METHOD_NOT_NEEDED);
-        android.text.TextPaint measure = new android.text.TextPaint(); measure.setTextSize(16 * getResources().getDisplayMetrics().scaledDensity); int width = anchor.getWidth();
+        android.text.TextPaint measure = new android.text.TextPaint(((TextView)anchor).getPaint()); int width = anchor.getWidth();
         for (String label : labels) width = Math.max(width, (int)Math.ceil(measure.measureText(label)) + dp(icons == null ? 32 : 68));
         popup.setWidth(Math.min(Math.min(dp(320), getResources().getDisplayMetrics().widthPixels - dp(32)), width));
         popup.setAdapter(new android.widget.ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels) {
             @Override public View getView(int position, View reusable, ViewGroup parent) {
-                TextView row = (TextView)super.getView(position, reusable, parent); row.setTextSize(16); row.setMinHeight(dp(48)); row.setPaddingRelative(dp(16), dp(12), dp(16), dp(12)); row.setGravity(Gravity.CENTER_VERTICAL);
+                TextView row = (TextView)super.getView(position, reusable, parent); row.setTextAppearance(MainActivity.this, com.google.android.material.R.style.TextAppearance_Material3_BodyLarge); row.setMinHeight(dp(48)); row.setPaddingRelative(dp(16), dp(12), dp(16), dp(12)); row.setGravity(Gravity.CENTER_VERTICAL);
                 row.setTextColor(position == selected ? getColor(R.color.papan_on_primary_container) : TEXT);
                 int resting = position == selected ? getColor(R.color.papan_primary_container) : Color.TRANSPARENT, focused = position == selected ? resting : getColor(R.color.papan_secondary_container);
                 android.graphics.drawable.StateListDrawable background = new android.graphics.drawable.StateListDrawable();
@@ -288,7 +293,7 @@ public final class MainActivity extends AppCompatActivity {
             }
         });
         popup.setOnItemClickListener((parent, view, position, id) -> { popup.dismiss(); choose.accept(position); }); popup.show();
-        popup.getListView().setChoiceMode(android.widget.ListView.CHOICE_MODE_SINGLE); popup.getListView().setItemChecked(selected, true); popup.setSelection(selected); return popup;
+        popup.getListView().setChoiceMode(selected < 0 ? android.widget.ListView.CHOICE_MODE_NONE : android.widget.ListView.CHOICE_MODE_SINGLE); if (selected >= 0) popup.getListView().setItemChecked(selected, true); popup.setSelection(Math.max(0, selected)); return popup;
     }
     private String collectionLabel(JSONObject value) { return value.optString("name") + (value.optBoolean("protected") ? " · protected" : ""); }
     private void showDestination(int id) {
@@ -298,7 +303,7 @@ public final class MainActivity extends AppCompatActivity {
     }
     private void updateChrome() {
         collectionButton.setVisibility(activityOpen ? View.GONE : View.VISIBLE); if (activityOpen) searchLayout.setVisibility(View.GONE); heading.setVisibility(activityOpen ? View.VISIBLE : View.GONE);
-        locationButton.setText(activityOpen ? "Activity" : remote ? "Desktop" : "On phone"); locationButton.setIconResource(activityOpen ? R.drawable.history : remote ? R.drawable.desktop : R.drawable.phone); locationButton.setContentDescription("Choose location: " + locationButton.getText());
+        locationButton.setText(LOCATION_LABELS[locationIndex()]); locationButton.setIconResource(LOCATION_ICONS[locationIndex()]); locationButton.setContentDescription("Choose location: " + locationButton.getText());
         toolbar.getMenu().findItem(107).setVisible(!activityOpen);
         toolbar.getMenu().findItem(108).setVisible(!activityOpen);
         toolbar.getMenu().findItem(103).setVisible(!remote && !activityOpen);
@@ -507,8 +512,8 @@ public final class MainActivity extends AppCompatActivity {
     private void chooseDestination(String input) {
         try {
             String url = LocalCapture.webLink(input); if (saveDialog != null) saveDialog.dismiss(); pendingLink = url;
-            LinearLayout body = dialogBody(); TextView source = text(url, 14); source.setTextColor(MUTED); body.addView(source); body.addView(text("On phone", 18)); JSONArray local = MobileLibrary.get(this).snapshot().getJSONArray("collections");
-            for (int i = 0; i < local.length(); i++) { JSONObject collection = local.getJSONObject(i); body.addView(button("On phone · " + collection.getString("name"), () -> saveLocal(url, collection.optString("id")), false)); }
+            LinearLayout body = dialogBody(); TextView source = text(url, 14); source.setTextColor(MUTED); body.addView(source); body.addView(text("Phone", 18)); JSONArray local = MobileLibrary.get(this).snapshot().getJSONArray("collections");
+            for (int i = 0; i < local.length(); i++) { JSONObject collection = local.getJSONObject(i); body.addView(button("Phone · " + collection.getString("name"), () -> saveLocal(url, collection.optString("id")), false)); }
             body.addView(button("+ New phone collection", () -> newCollection(() -> saveLocal(url, selectedLocal)), false));
             LinearLayout remoteChoices = column(); body.addView(remoteChoices); remoteChoices.addView(text("Desktop", 18)); TextView loading = text("Checking paired desktop…", 14); remoteChoices.addView(loading);
             saveDialog = destinationSheet(body); final Dialog current = saveDialog; current.setOnDismissListener(d -> { if (saveDialog == current) { pendingLink = null; saveDialog = null; } });
