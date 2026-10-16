@@ -9,6 +9,8 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.graphics.Insets;
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
+import androidx.core.widget.NestedScrollView;
 import androidx.appcompat.view.ContextThemeWrapper;
 import com.google.android.material.appbar.MaterialToolbar;
 import androidx.appcompat.widget.ListPopupWindow;
@@ -21,6 +23,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
+import com.google.android.material.behavior.HideViewOnScrollBehavior;
 import com.google.android.material.slider.Slider;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.radiobutton.MaterialRadioButton;
@@ -68,7 +71,8 @@ public final class MainActivity extends AppCompatActivity {
     private static final String[] LOCATION_LABELS = {"Phone", "Desktop", "Activity"};
     private static final int[] LOCATION_ICONS = {R.drawable.phone, R.drawable.desktop, R.drawable.history};
     private int TEXT, MUTED, ACCENT;
-    private LinearLayout root, board;
+    private LinearLayout root, board, actions;
+    private HideViewOnScrollBehavior<LinearLayout> actionScroll;
     private MaterialButton collectionButton;
     private JSONArray collectionChoices = new JSONArray();
     private ListPopupWindow collectionMenu, locationMenu;
@@ -77,7 +81,7 @@ public final class MainActivity extends AppCompatActivity {
     private FloatingActionButton addLink;
     private TextInputLayout searchLayout;
     private RecyclerView pinGrid;
-    private ScrollView boardScroll;
+    private NestedScrollView boardScroll;
     private String gridKey = "";
     private int gridAnchor = -1, gridAnchorOffset;
     private boolean loadingMore;
@@ -197,14 +201,20 @@ public final class MainActivity extends AppCompatActivity {
         searchLayout.setVisibility(View.GONE);
         LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(-1, -2); searchParams.setMargins(dp(16), 0, dp(16), dp(8)); content.addView(searchLayout, searchParams);
         search.addTextChangedListener(new TextWatcher() { public void beforeTextChanged(CharSequence value,int start,int count,int after) {} public void onTextChanged(CharSequence value,int start,int before,int count) { if (activityOpen) return; if (remote) { boardGeneration++; handler.removeCallbacks(searchPoll); handler.postDelayed(searchPoll, 250); } else renderPins(); } public void afterTextChanged(Editable value) {} });
-        FrameLayout canvas = new FrameLayout(this); content.addView(canvas, new LinearLayout.LayoutParams(-1, 0, 1));
-        boardScroll = new ScrollView(this); boardScroll.setFillViewport(true); board = column(); board.setPadding(dp(16), dp(4), dp(16), dp(80)); boardScroll.addView(board); canvas.addView(boardScroll, new FrameLayout.LayoutParams(-1, -1));
-        pinGrid = new RecyclerView(this); pinGrid.setPadding(0, dp(4), 0, dp(80)); pinGrid.setClipToPadding(false); pinGrid.setHasFixedSize(true); pinGrid.setItemAnimator(null); pinGrid.setVisibility(View.GONE); canvas.addView(pinGrid, new FrameLayout.LayoutParams(-1, -1));
+        CoordinatorLayout canvas = new CoordinatorLayout(this); content.addView(canvas, new LinearLayout.LayoutParams(-1, 0, 1));
+        boardScroll = new NestedScrollView(this); boardScroll.setFillViewport(true); board = column(); board.setPadding(dp(16), dp(4), dp(16), dp(80)); boardScroll.addView(board); canvas.addView(boardScroll, new CoordinatorLayout.LayoutParams(-1, -1));
+        pinGrid = new RecyclerView(this); pinGrid.setPadding(0, dp(4), 0, dp(80)); pinGrid.setClipToPadding(false); pinGrid.setHasFixedSize(true); pinGrid.setItemAnimator(null); pinGrid.setVisibility(View.GONE); canvas.addView(pinGrid, new CoordinatorLayout.LayoutParams(-1, -1));
         pinGrid.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> { if (right - left != oldRight - oldLeft && pinGrid.getAdapter() != null) pinGrid.post(this::renderPins); });
-        LinearLayout actions = row(); actions.setPadding(dp(16), dp(8), dp(16), dp(16)); canvas.addView(actions, new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+        actions = row(); actions.setPadding(dp(16), dp(8), dp(16), dp(16));
+        actionScroll = new HideViewOnScrollBehavior<LinearLayout>(HideViewOnScrollBehavior.EDGE_BOTTOM) {
+            @Override public boolean onStartNestedScroll(CoordinatorLayout parent, LinearLayout child, View direct, View target, int axes, int type) { return !child.hasFocus() && super.onStartNestedScroll(parent, child, direct, target, axes, type); }
+        };
+        CoordinatorLayout.LayoutParams actionParams = new CoordinatorLayout.LayoutParams(-1, -2); actionParams.gravity = Gravity.BOTTOM; actionParams.setBehavior(actionScroll); canvas.addView(actions, actionParams);
         locationButton = new ExtendedFloatingActionButton(this); locationButton.setTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodyLarge); locationButton.setSingleLine(true); locationButton.setEllipsize(android.text.TextUtils.TruncateAt.END); locationButton.setMinHeight(dp(48)); locationButton.setMinimumHeight(dp(48)); locationButton.setInsetTop(dp(4)); locationButton.setInsetBottom(dp(4)); locationButton.setPaddingRelative(dp(12), dp(8), dp(12), dp(8)); locationButton.setIconSize(dp(20)); locationButton.setIconPadding(dp(8)); locationButton.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.papan_primary_container))); locationButton.setTextColor(getColor(R.color.papan_on_primary_container)); locationButton.setIconTint(ColorStateList.valueOf(getColor(R.color.papan_on_primary_container))); locationButton.setOnClickListener(v -> chooseLocation()); actions.addView(locationButton, new LinearLayout.LayoutParams(-2, -2));
         View flexible = new View(this); actions.addView(flexible, new LinearLayout.LayoutParams(dp(12), 0, 1));
         addLink = new FloatingActionButton(this); addLink.setSize(FloatingActionButton.SIZE_MINI); addLink.setEnsureMinTouchTargetSize(true); addLink.setMaxImageSize(dp(20)); addLink.setImageResource(R.drawable.add); addLink.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); addLink.setImageTintList(ColorStateList.valueOf(getColor(R.color.papan_on_primary))); addLink.setContentDescription("Add link"); addLink.setOnClickListener(v -> enterLink()); actions.addView(addLink, new LinearLayout.LayoutParams(-2, -2));
+        View.OnFocusChangeListener revealActions = (view, focused) -> { if (focused) actionScroll.slideIn(actions, false); };
+        locationButton.setOnFocusChangeListener(revealActions); addLink.setOnFocusChangeListener(revealActions);
         actions.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             int width = 0; for (String label : LOCATION_LABELS) width = Math.max(width, (int)Math.ceil(locationButton.getPaint().measureText(label)));
             width += locationButton.getPaddingStart() + locationButton.getPaddingEnd() + locationButton.getIconSize() + locationButton.getIconPadding();
@@ -306,6 +316,7 @@ public final class MainActivity extends AppCompatActivity {
     }
     private String collectionLabel(JSONObject value) { return value.optString("name") + (value.optBoolean("protected") ? " · protected" : ""); }
     private void showDestination(int id) {
+        actionScroll.slideIn(actions, false);
         remote = id == 2; activityOpen = id == 3; boardGeneration++; gridKey = ""; handler.removeCallbacks(browsePoll); handler.removeCallbacks(searchPoll); search.setText(""); updateChrome();
         if (activityOpen) { getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE); heading.setText("Desktop delivery activity"); renderActivity(); }
         else if (remote) loadDesktop(false, true); else refreshLocal();
@@ -393,7 +404,7 @@ public final class MainActivity extends AppCompatActivity {
             });
         });
     }
-    private void clearBoard() { pinGrid.removeCallbacks(resizeBoard); pinGrid.setVisibility(View.GONE); pinGrid.setAdapter(null); boardScroll.setVisibility(View.VISIBLE); board.removeAllViews(); }
+    private void clearBoard() { actionScroll.slideIn(actions, false); pinGrid.removeCallbacks(resizeBoard); pinGrid.setVisibility(View.GONE); pinGrid.setAdapter(null); boardScroll.setVisibility(View.VISIBLE); board.removeAllViews(); }
     private void renderPins() {
         if (board == null || activityOpen) return;
         try {
@@ -413,6 +424,7 @@ public final class MainActivity extends AppCompatActivity {
             }
             if (pins.isEmpty()) { clearBoard(); board.addView(text(query.isEmpty() ? "This collection is empty." : "No matching pins.", 20)); board.addView(text(query.isEmpty() ? "Paste a link or share one to Papan to add your first reference." : "Try another title, source or note.", 16)); return; }
             String key = (remote ? "desktop:" + selectedRemote : "phone:" + selectedLocal) + ":" + query;
+            if (!key.equals(gridKey)) actionScroll.slideIn(actions, false);
             GridLayoutManager previous = (GridLayoutManager)pinGrid.getLayoutManager(); int first = key.equals(gridKey) && previous != null ? previous.findFirstVisibleItemPosition() : -1;
             View anchor = first >= 0 ? previous.findViewByPosition(first) : null; int offset = anchor == null ? 0 : previous.getDecoratedTop(anchor) - pinGrid.getPaddingTop();
             // A second size event can arrive before the replacement layout has attached cards.
@@ -425,6 +437,7 @@ public final class MainActivity extends AppCompatActivity {
             layout.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() { @Override public int getSpanSize(int position) { return adapter.getItemViewType(position) == 1 ? spanCount : 1; } });
             pinGrid.setLayoutManager(layout); pinGrid.setAdapter(adapter); if (first >= 0) layout.scrollToPositionWithOffset(Math.min(first, adapter.getItemCount() - 1), offset); gridKey = key;
             boardScroll.setVisibility(View.GONE); pinGrid.setVisibility(View.VISIBLE);
+            pinGrid.post(() -> { if (!pinGrid.canScrollVertically(-1)) actionScroll.slideIn(actions); });
         } catch (Exception error) { message(error.getMessage()); }
     }
     private final class PinAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {

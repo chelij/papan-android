@@ -18,6 +18,8 @@ This mobile-board update is unreleased; the latest published Android APK remains
 
 Open **Board appearance** using the toolbar menu. Previews reach both screen edges and zoom and crop to fill their tiles by default, including desktop collections. Change **Preview size** to fit more or fewer aligned cards, or turn off **Fill image frames** to see whole images. Each collection remembers its size and frame fit on this phone; desktop collections still retain their desktop frame proportions. The same panel offers **Use phone setting**, **Light** and **Dark** appearance.
 
+The bottom location and Add buttons hide while scrolling down and return when scrolling up. Changing collections, opening an empty board or focusing a button with a keyboard brings them back. Android touch exploration keeps the controls visible.
+
 Desktop pins follow the order arranged on desktop, including manual moves picked up by the foreground board's five-second refresh. Each protected collection needs its password once per app session; switching between already unlocked collections keeps their access. Actual app close or desktop locking still ends access. Phone-only collections retain their newest-first order.
 
 Desktop video cards show still-image covers generated from their saved previews. These thumbnails follow the same pairing and collection-password access as other remote media. Opening a video plays it in the fitted full-screen viewer, with Play/Pause and a seek slider. Vertical swipes move between pins; sideways swipes move between attachments. Details contains the full title, source and editing actions. Desktop preview frames follow the collection's desktop proportions, including vertical frames; phone-only size/fit overrides remain adjustable. Decoded thumbnails are reused in bounded memory while scrolling. The matching desktop update is required for video covers.
@@ -72,6 +74,8 @@ PAPAN_ANDROID_SERIAL=emulator-5554 PAPAN_ADB=/path/to/adb npm run test:location-
 ```
 
 This captures actual virtual-display animation frames and checks that the location menu reveals upward without covering its button. It also checks location choices, consistent dimensions/typography and dismissal at narrow, normal, tablet and enlarged-text sizes. Results are under `artifacts/android/location-menu/`; no phone or desktop receiver is needed.
+
+`npm run test:scroll-controls`, with the same emulator variables, verifies real swipes, both controls leaving/returning to the viewport, refresh position retention, direction reversal and keyboard recovery across the same responsive sizes. Native screenshots and results are under `artifacts/android/scroll-controls/`. The full desktop-backed suite also checks this behavior on remote pin previews.
 
 The unreleased 0.3.0 development pair was checked on 14 October 2026 using an isolated Android 16/API 36 x86_64 emulator and virtual display, against desktop source based on `beec3da`. Native checks cover local collection creation, cached images and actual video playback/deletion, pin edit/search, durable private storage, destination selection while desktop is offline, restart/retry without destination changes, protected cancel/wrong/correct passwords, an actual protected save and clearing contents after desktop lock. An 85-pin collection checks pagination, search beyond loaded pages, card recycling and position retention. Narrow phone, tablet, 200% font and keyboard layouts are also checked. Build tools are 35.0.0/JDK 21. See [verification](docs/verification.md) for exact evidence and limits.
 

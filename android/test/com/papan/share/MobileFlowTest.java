@@ -55,6 +55,7 @@ public final class MobileFlowTest extends Instrumentation {
     @Override public void callActivityOnCreate(Activity activity, Bundle saved) { super.callActivityOnCreate(activity, saved); if (activity instanceof MainActivity) main = (MainActivity)activity; }
     @Override public void onCreate(Bundle args) { super.onCreate(args); arguments = args; start(); }
     @Override public void onStart() {
+        if ("true".equals(arguments.getString("scrollOnly"))) { scrollOnly(); return; }
         if ("true".equals(arguments.getString("locationOnly"))) { locationOnly(); return; }
         Bundle result = new Bundle();
         boolean cameraOnly = "true".equals(arguments.getString("cameraOnly"));
@@ -156,6 +157,7 @@ public final class MobileFlowTest extends Instrumentation {
             if (!cameraOnly) { result.putDouble("captionTitleContrast", captionTitleContrast); result.putDouble("captionSourceContrast", captionSourceContrast); result.putString("checks", result.getString("checks") + " Desktop-style captions: single-line title/source, no solid caption block, continuous rendered fade with AA contrast at every text row over pure white, full labels retained for details/accessibility."); }
             if (!cameraOnly) result.putString("checks", result.getString("checks") + " Preview rows reach both content edges without side padding.");
             if (!cameraOnly) result.putString("checks", result.getString("checks") + " Compact bottom controls retain 48dp tap targets with 40dp normal-size faces, stable scalable labels, dynamic scroll clearance and Add activation outside its visible face.");
+            if (!cameraOnly) result.putString("checks", result.getString("checks") + " Real desktop-board swipes hide bottom controls on downward scrolling and restore them upward; refresh retains the hidden state and reference; reversal and keyboard recovery pass.");
             result.putString("status", "passed");
         } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); if (main != null) try { screenshot(main, "failure.png"); result.putString("screenStatus", ((TextView)field(main, "status")).getText().toString()); result.putString("visibleText", text(main)); result.putBoolean("paired", PhoneStore.get(main).snapshot().has("config")); } catch (Exception ignored) {} }
         finally {
@@ -171,6 +173,55 @@ public final class MobileFlowTest extends Instrumentation {
         finish("passed".equals(result.getString("status")) ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
     }
     private void clip(String value) { clipboardFixture = value; onMain(() -> { require(!((KeyguardManager)getTargetContext().getSystemService(Context.KEYGUARD_SERVICE)).isDeviceLocked(), "Phone locked during clipboard testing."); clipboard.setPrimaryClip(ClipData.newPlainText("Papan test", value)); ClipData copy = clipboard.getPrimaryClip(); require(copy != null && value.contentEquals(copy.getItemAt(0).getText() == null ? "" : copy.getItemAt(0).getText()), "Test clipboard write/read did not match on this display."); }); }
+    private void scrollOnly() {
+        Bundle result = new Bundle();
+        try {
+            require("com.papan.share.test".equals(getTargetContext().getPackageName()), "Only the disposable test package is allowed.");
+            createDisplay(720, 1440); result.putInt("displayId", displayId);
+            main = (MainActivity)startActivitySync(new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), ActivityOptions.makeBasic().setLaunchDisplayId(displayId).toBundle());
+            await(() -> main.hasWindowFocus() && !busy(), 10000, "Virtual scroll board did not initialize.");
+            MobileLibrary store = MobileLibrary.get(main); String collection = store.create("Scroll test fixtures");
+            for (int i = 0; i < 40; i++) { String id = store.add(collection, "https://example.invalid/scroll-fixture/" + i); store.captured(id, new JSONObject().put("title", "Scroll fixture " + i).put("kind", "link").put("capture", "saved")); }
+            onMain(() -> { try { Field selected = MainActivity.class.getDeclaredField("selectedLocal"); selected.setAccessible(true); selected.set(main, collection); Method refresh = MainActivity.class.getDeclaredMethod("refreshLocal"); refresh.setAccessible(true); refresh.invoke(main); } catch (Exception error) { throw new RuntimeException(error); } });
+            await(() -> grid().getItemCount() == 40, 5000, "Scroll fixture did not enter the native board."); scrollingControls(true);
+            relaunch(600, 1400, 1); scrollingControls(false); relaunch(1280, 1600, 1); scrollingControls(false); relaunch(720, 1600, 2); scrollingControls(false);
+            swipeBoard(true); await(() -> ((View)field(main, "actions")).getTranslationY() > 0, 5000, "Controls did not hide before changing collection.");
+            click(main, "New collection"); input("Collection name", "Empty scroll fixture"); click(main, "Create");
+            await(() -> main.hasWindowFocus() && has("This collection is empty."), 5000, "New empty collection did not finish opening."); require(((View)field(main, "actions")).getTranslationY() == 0, "New empty collection left navigation hidden.");
+            result.putString("checks", "Real private-display swipes hide both bottom controls when scrolling down and restore them when scrolling up. Same-board refresh retains the hidden state and visible reference. Rapid direction reversal settles correctly; keyboard focus reveals controls and Tab/Enter opens Add. Native touch-exploration protection stays enabled. Fresh/empty collections restore controls. Compact sizes, 48dp targets and clearance pass at 300dp/360dp/640dp and 200% text. No physical phone used."); result.putString("status", "passed");
+        } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); try { View actions = (View)field(main, "actions"); RecyclerView board = (RecyclerView)field(main, "pinGrid"); result.putString("scrollState", "width=" + main.getResources().getConfiguration().screenWidthDp + ",font=" + testFontScale + ",translation=" + actions.getTranslationY() + ",height=" + actions.getHeight() + ",focus=" + actions.hasFocus() + ",offset=" + board.computeVerticalScrollOffset() + ",up=" + board.canScrollVertically(-1) + ",down=" + board.canScrollVertically(1)); } catch (Exception ignored) {} }
+        finally { onMain(() -> { if (main != null && !main.isDestroyed()) main.finishAndRemoveTask(); }); waitForIdleSync(); if (display != null) display.release(); if (output != null) output.close(); }
+        finish("passed".equals(result.getString("status")) ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
+    }
+    private void swipeBoard(boolean down) throws Exception {
+        require(displayId != Display.DEFAULT_DISPLAY && main.getDisplay().getDisplayId() == displayId, "Refusing a swipe outside the isolated display."); int[] point = new int[2]; int[] size = new int[2];
+        getUiAutomation().waitForIdle(200, 3000);
+        onMain(() -> { try { View board = (View)field(main, "pinGrid"); board.getLocationOnScreen(point); size[0] = board.getWidth(); size[1] = board.getHeight(); } catch (Exception error) { throw new RuntimeException(error); } });
+        int x = point[0] + size[0] / 2, upper = point[1] + size[1] / 4, lower = point[1] + size[1] * 3 / 4;
+        try (android.os.ParcelFileDescriptor.AutoCloseInputStream result = new android.os.ParcelFileDescriptor.AutoCloseInputStream(getUiAutomation().executeShellCommand("input -d " + displayId + " swipe " + x + " " + (down ? lower : upper) + " " + x + " " + (down ? upper : lower) + " 450"))) { require(result.read() == -1, "Virtual board swipe failed."); }
+        onMain(() -> { try { ((RecyclerView)field(main, "pinGrid")).stopScroll(); } catch (Exception error) { throw new RuntimeException(error); } });
+    }
+    private void scrollingControls(boolean capture) throws Exception {
+        await(() -> ((View)field(main, "pinGrid")).canScrollVertically(1), 5000, "Native board is too short to exercise scrolling."); compactControls();
+        View actions = (View)field(main, "actions"); RecyclerView board = (RecyclerView)field(main, "pinGrid");
+        if (capture) screenshot(main, "scroll-controls-before.png");
+        swipeBoard(true); await(() -> actions.getTranslationY() >= actions.getHeight() && board.canScrollVertically(-1), 5000, "Scrolling down did not clear the bottom controls.");
+        onMain(() -> { try { android.graphics.Rect visible = new android.graphics.Rect(); require(!((View)field(main, "locationButton")).getGlobalVisibleRect(visible) && !((View)field(main, "addLink")).getGlobalVisibleRect(visible), "Hidden controls still cover the preview viewport."); } catch (Exception error) { throw new RuntimeException(error); } });
+        if (capture) screenshot(main, "scroll-controls-hidden.png");
+        int first = grid().findFirstVisibleItemPosition(), top = grid().getDecoratedTop(grid().findViewByPosition(first));
+        onMain(() -> { try { Method refresh = MainActivity.class.getDeclaredMethod("renderPins"); refresh.setAccessible(true); refresh.invoke(main); } catch (Exception error) { throw new RuntimeException(error); } }); waitForIdleSync();
+        await(() -> grid().findFirstVisibleItemPosition() == first, 5000, "Refresh changed the visible reference."); require(actions.getTranslationY() >= actions.getHeight() && grid().getDecoratedTop(grid().findViewByPosition(first)) == top, "Refresh revealed controls or moved the board.");
+        swipeBoard(false); await(() -> actions.getTranslationY() == 0, 5000, "Scrolling up did not restore bottom controls.");
+        if (capture) screenshot(main, "scroll-controls-returned.png");
+        swipeBoard(true); swipeBoard(false); await(() -> actions.getTranslationY() == 0, 5000, "Direction reversal left controls hidden.");
+        swipeBoard(true); await(() -> actions.getTranslationY() >= actions.getHeight(), 5000, "Controls did not hide before keyboard recovery.");
+        key(android.view.KeyEvent.KEYCODE_TAB);
+        onMain(() -> { try { require(((View)field(main, "locationButton")).requestFocus(), "Location could not receive keyboard focus."); } catch (Exception error) { throw new RuntimeException(error); } });
+        await(() -> actions.getTranslationY() == 0, 5000, "Keyboard focus did not reveal the controls."); key(android.view.KeyEvent.KEYCODE_TAB); require(((View)field(main, "addLink")).hasFocus(), "Tab did not reach Add after keyboard recovery."); key(android.view.KeyEvent.KEYCODE_ENTER); await(() -> has("Add a link"), 5000, "Keyboard-revealed Add could not open its dialog."); click(main, "Cancel");
+        com.google.android.material.behavior.HideViewOnScrollBehavior<?> behavior = (com.google.android.material.behavior.HideViewOnScrollBehavior<?>)field(main, "actionScroll"); require(behavior.isDisabledOnTouchExploration(), "Scroll hiding disabled native touch-exploration protection.");
+        onMain(() -> { try { ((View)field(main, "locationButton")).clearFocus(); ((View)field(main, "addLink")).clearFocus(); board.scrollToPosition(0); } catch (Exception error) { throw new RuntimeException(error); } });
+        await(() -> grid().findFirstVisibleItemPosition() == 0, 5000, "Scroll check did not restore the first row.");
+    }
     private void locationOnly() {
         Bundle result = new Bundle();
         try {
@@ -645,6 +696,7 @@ public final class MobileFlowTest extends Instrumentation {
         await(() -> { RecyclerView board = (RecyclerView)field(main, "pinGrid"); View card = board.getChildAt(0); return card != null && Math.abs((double)card.getWidth() / card.getHeight() - 90.0 / 160) < .02 && imageCount(board) == 4; }, 10000, "Desktop portrait frames were forced square or did not finish loading.");
         onMain(() -> require(imageFillsFrame(main.getWindow().getDecorView()), "Desktop whole-image fit prevented phone previews filling their tiles.")); alignedBoard(); screenshot(main, "portrait-board.png");
         click(main, "Many references"); await(() -> ((org.json.JSONArray)field(main, "remotePins")).length() == 40, 10000, "First desktop page did not load.");
+        scrollingControls(false);
         require("Fixture reference 0".equals(((org.json.JSONArray)field(main, "remotePins")).getJSONObject(0).optString("title")), "Desktop pins did not preserve the desktop's saved order.");
         click(main, "Load more pins"); await(() -> ((org.json.JSONArray)field(main, "remotePins")).length() == 80, 10000, "Second desktop page did not load."); SystemClock.sleep(6000); require(((org.json.JSONArray)field(main, "remotePins")).length() == 80, "Refresh discarded loaded pages.");
         onMain(() -> { try { RecyclerView grid = (RecyclerView)field(main, "pinGrid"); require(grid.getChildCount() < 40 && ((GridLayoutManager)grid.getLayoutManager()).findFirstVisibleItemPosition() > 0, "Desktop cards were not recycled or refresh reset the scroll position."); } catch (Exception error) { throw new RuntimeException(error); } });
