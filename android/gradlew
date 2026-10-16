@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+PAPAN_GRADLE_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if [ -n "${JAVA_HOME:-}" ]; then
+  exec "$JAVA_HOME/bin/java" -classpath "$PAPAN_GRADLE_ROOT/gradle/wrapper/gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain -p "$PAPAN_GRADLE_ROOT" "$@"
+else
+  exec java -classpath "$PAPAN_GRADLE_ROOT/gradle/wrapper/gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain -p "$PAPAN_GRADLE_ROOT" "$@"
+fi

@@ -1,0 +1,19 @@
+<resources>
+  <color name="papan_primary">#46662D</color>
+  <color name="papan_on_primary">#FFFFFF</color>
+  <color name="papan_primary_container">#D0F5AD</color>
+  <color name="papan_on_primary_container">#203509</color>
+  <color name="papan_secondary">#5D6658</color>
+  <color name="papan_on_secondary">#FFFFFF</color>
+  <color name="papan_secondary_container">#E2E7DA</color>
+  <color name="papan_on_secondary_container">#30382A</color>
+  <color name="papan_surface">#FFFEFC</color>
+  <color name="papan_on_surface">#252822</color>
+  <color name="papan_surface_variant">#E7E8E1</color>
+  <color name="papan_on_surface_variant">#5D6359</color>
+  <color name="papan_outline">#757C70</color>
+  <color name="papan_background">#F3F3EF</color>
+  <color name="papan_inverse">#30332D</color>
+  <color name="papan_on_inverse">#F3F3EF</color>
+  <bool name="papan_light_bars">true</bool>
+</resources>
