@@ -155,6 +155,7 @@ public final class MobileFlowTest extends Instrumentation {
             if (!cameraOnly && new File(getTargetContext().getFilesDir(), "style-demo.json").exists()) result.putString("checks", result.getString("checks") + " Credited artwork board: equal card bounds and aligned rows/columns at three preview sizes; real slider keyboard input; collection-specific sizing persists across fresh activity; fill/whole-image control; light/dark/system appearance controls; native screenshots with decoded real artworks.");
             if (!cameraOnly) { result.putDouble("captionTitleContrast", captionTitleContrast); result.putDouble("captionSourceContrast", captionSourceContrast); result.putString("checks", result.getString("checks") + " Desktop-style captions: single-line title/source, no solid caption block, continuous rendered fade with AA contrast at every text row over pure white, full labels retained for details/accessibility."); }
             if (!cameraOnly) result.putString("checks", result.getString("checks") + " Preview rows reach both content edges without side padding.");
+            if (!cameraOnly) result.putString("checks", result.getString("checks") + " Compact bottom controls retain 48dp tap targets with 40dp normal-size faces, stable scalable labels, dynamic scroll clearance and Add activation outside its visible face.");
             result.putString("status", "passed");
         } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); if (main != null) try { screenshot(main, "failure.png"); result.putString("screenStatus", ((TextView)field(main, "status")).getText().toString()); result.putString("visibleText", text(main)); result.putBoolean("paired", PhoneStore.get(main).snapshot().has("config")); } catch (Exception ignored) {} }
         finally {
@@ -178,7 +179,7 @@ public final class MobileFlowTest extends Instrumentation {
             main = (MainActivity)startActivitySync(new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), ActivityOptions.makeCustomAnimation(getTargetContext(), 0, 0).setLaunchDisplayId(displayId).toBundle());
             await(() -> main.hasWindowFocus() && !busy(), 10000, "Virtual location board did not initialize."); locationMotion(); locationSizing();
             relaunch(600, 1400, 1); locationSizing(); relaunch(1280, 1600, 1); locationSizing(); relaunch(720, 1600, 2); locationSizing();
-            result.putString("checks", "Composited virtual-display motion frames keep the current button uncovered while the menu reveals upward; native location selection, stable dimensions/typography and current-button dismissal pass at 300dp/360dp/640dp and 200% text. No physical phone used."); result.putString("status", "passed");
+            result.putString("checks", "Composited virtual-display motion frames keep the current button uncovered while the menu reveals upward; native location selection, stable dimensions/typography and current-button dismissal pass at 300dp/360dp/640dp and 200% text. Compact controls retain 48dp tap targets, 40dp normal-size faces, scalable labels and dynamic clearance; Add activates outside its visible face. No physical phone used."); result.putString("status", "passed");
         } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); }
         finally { onMain(() -> { if (main != null && !main.isDestroyed()) main.finishAndRemoveTask(); }); waitForIdleSync(); if (display != null) display.release(); if (output != null) output.close(); }
         finish("passed".equals(result.getString("status")) ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
@@ -567,7 +568,25 @@ public final class MobileFlowTest extends Instrumentation {
         Bitmap bitmap = Bitmap.createBitmap(popup.getWidth(), popup.getHeight(), Bitmap.Config.ARGB_8888); popup.draw(new android.graphics.Canvas(bitmap));
         try (FileOutputStream file = new FileOutputStream(new File(main.getFilesDir(), capture))) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, file); } catch (Exception error) { throw new RuntimeException(error); } finally { bitmap.recycle(); }
     }); }
+    private void compactControls() throws Exception {
+        require(displayId != Display.DEFAULT_DISPLAY && main.getDisplay().getDisplayId() == displayId, "Refusing interaction outside the isolated display.");
+        int[] point = new int[2];
+        onMain(() -> { try {
+            float density = main.getResources().getDisplayMetrics().density; int touch = Math.round(48 * density), face = Math.round(40 * density);
+            com.google.android.material.floatingactionbutton.FloatingActionButton add = (com.google.android.material.floatingactionbutton.FloatingActionButton)field(main, "addLink");
+            com.google.android.material.button.MaterialButton location = (com.google.android.material.button.MaterialButton)field(main, "locationButton");
+            android.graphics.Rect visible = new android.graphics.Rect(); require(add.getContentRect(visible) && visible.width() == face && visible.height() == face, "Add still covers more than a mini button face.");
+            require(add.getWidth() >= touch && add.getHeight() >= touch && location.getWidth() >= touch && location.getHeight() >= touch, "Compact controls lost their Android tap targets.");
+            if (testFontScale == 1) require(location.getHeight() - location.getInsetTop() - location.getInsetBottom() == face, "Location button face did not become compact.");
+            View row = (View)location.getParent(), grid = (View)field(main, "pinGrid"), body = (View)field(main, "board");
+            require(grid.getPaddingBottom() == row.getHeight() + Math.round(8 * density) && body.getPaddingBottom() == grid.getPaddingBottom(), "Bottom clearance does not follow compact controls.");
+            add.getLocationOnScreen(point); point[0] += Math.max(1, visible.left / 2); point[1] += add.getHeight() / 2;
+        } catch (Exception error) { throw new RuntimeException(error); } });
+        try (android.os.ParcelFileDescriptor.AutoCloseInputStream result = new android.os.ParcelFileDescriptor.AutoCloseInputStream(getUiAutomation().executeShellCommand("input -d " + displayId + " tap " + point[0] + " " + point[1]))) { require(result.read() == -1, "Virtual Add tap failed."); }
+        await(() -> has("Add a link"), 5000, "Add did not accept a tap outside its visible face."); click(main, "Cancel"); await(main::hasWindowFocus, 5000, "Add dialog did not dismiss.");
+    }
     private void locationSizing() throws Exception {
+        compactControls();
         TextView button = (TextView)field(main, "locationButton"), collection = (TextView)field(main, "collectionButton"); int width = button.getWidth(), height = button.getHeight(); int menuWidth = -1, menuHeight = -1;
         require(button.getTextSize() == collection.getTextSize() && button.getTypeface().equals(collection.getTypeface()), "Picker buttons use inconsistent typography.");
         for (String label : new String[] {"Desktop", "Activity", "Phone"}) {
