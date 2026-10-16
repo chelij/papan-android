@@ -82,8 +82,11 @@ public final class MobileFlowTest extends Instrumentation {
                 await(() -> MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 2, 3000, "Same URL could not be saved in a different phone collection.");
                 JSONObject local = MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(1);
                 await(() -> "saved".equals(MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(1).optString("capture")), 15000, "Second phone preview was not saved.");
-                await(() -> description(main.getWindow().getDecorView(), "Open pin: " + local.optString("title")) != null, 5000, "Saved phone pin card did not bind.");
-                onMain(() -> { View card = description(main.getWindow().getDecorView(), "Open pin: " + local.optString("title")); require(card != null, "Phone pin card missing."); card.performClick(); });
+                await(() -> {
+                    boolean[] opened = {false};
+                    onMain(() -> { View card = description(main.getWindow().getDecorView(), "Open pin: " + local.optString("title")); if (card != null) opened[0] = card.performClick(); });
+                    return opened[0];
+                }, 5000, "Saved phone pin card did not become tappable.");
                 click(main, "Details"); click(main, "Edit title and notes"); input("Title", "Pocket reference"); input("Notes", "Saved without desktop"); click(main, "Save changes");
                 input("Search this collection", "does not match"); require(text(main).contains("No matching pins."), "Phone collection search did not filter."); input("Search this collection", "Pocket reference"); require(text(main).contains("Pocket reference"), "Phone pin edit/search failed."); input("Search this collection", "");
                 await(() -> hasImage(main.getWindow().getDecorView()), 5000, "Edited phone card did not decode its preview."); alignedBoard(); screenshot(main, "local.png");
@@ -151,6 +154,7 @@ public final class MobileFlowTest extends Instrumentation {
             if (!cameraOnly) result.putString("checks", result.getString("checks") + " Collection dropdown highlights its selected row without checkboxes; the Phone/Desktop/Activity button shows the current window and its menu omits that window. Button/menu dimensions stay stable across locations; picker typography matches at every checked font scale; tapping the current button opens and dismisses without changing location.");
             if (!cameraOnly && new File(getTargetContext().getFilesDir(), "style-demo.json").exists()) result.putString("checks", result.getString("checks") + " Credited artwork board: equal card bounds and aligned rows/columns at three preview sizes; real slider keyboard input; collection-specific sizing persists across fresh activity; fill/whole-image control; light/dark/system appearance controls; native screenshots with decoded real artworks.");
             if (!cameraOnly) { result.putDouble("captionTitleContrast", captionTitleContrast); result.putDouble("captionSourceContrast", captionSourceContrast); result.putString("checks", result.getString("checks") + " Desktop-style captions: single-line title/source, no solid caption block, continuous rendered fade with AA contrast at every text row over pure white, full labels retained for details/accessibility."); }
+            if (!cameraOnly) result.putString("checks", result.getString("checks") + " Preview rows reach both content edges without side padding.");
             result.putString("status", "passed");
         } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); if (main != null) try { screenshot(main, "failure.png"); result.putString("screenStatus", ((TextView)field(main, "status")).getText().toString()); result.putString("visibleText", text(main)); result.putBoolean("paired", PhoneStore.get(main).snapshot().has("config")); } catch (Exception ignored) {} }
         finally {
@@ -491,6 +495,8 @@ public final class MobileFlowTest extends Instrumentation {
             RecyclerView.ViewHolder beside = position % columns == 0 ? null : view.findViewHolderForAdapterPosition(position - 1), above = view.findViewHolderForAdapterPosition(position - columns);
             if (beside != null) require(card.getLeft() == beside.itemView.getRight(), "Empty space or overlap remains between pin columns.");
             if (above != null) require(card.getTop() == above.itemView.getBottom(), "Empty space or overlap remains between pin rows.");
+            if (position % columns == 0) require(card.getLeft() == 0, "Preview row does not reach the left edge.");
+            if (position % columns == columns - 1) require(card.getRight() == view.getWidth(), "Preview row does not reach the right edge.");
             previewCaption(card);
         }
         require(checked >= Math.min(columns, view.getAdapter().getItemCount()), "No full row was checked.");
