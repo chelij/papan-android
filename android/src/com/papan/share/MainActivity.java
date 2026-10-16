@@ -317,7 +317,7 @@ public final class MainActivity extends AppCompatActivity {
         if (show) search.requestFocus(); else { search.setText(""); search.clearFocus(); ((android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(search.getWindowToken(), 0); }
     }
     private String boardPreferenceKey() { return (remote ? "desktop:" + selectedRemote : "phone:" + selectedLocal); }
-    private boolean fillFrames() { JSONObject collection = remote ? find(remoteCollections, selectedRemote) : null; JSONObject preview = collection == null ? null : collection.optJSONObject("preview"); return appearance.getBoolean("fill:" + boardPreferenceKey(), preview == null || "cover".equals(preview.optString("fit"))); }
+    private boolean fillFrames() { return appearance.getBoolean("fill:" + boardPreferenceKey(), true); }
     private void retainRemoteImages(JSONArray collections) { java.util.Set<String> authorized = new java.util.HashSet<>(); for (int i = 0; i < collections.length(); i++) { JSONObject collection = collections.optJSONObject(i); if (collection != null && !collection.optBoolean("locked")) authorized.add(collection.optString("id")); } previewImages.retainRemote(authorized); }
     private boolean measuredItem(JSONObject item) { return item.optDouble("previewWidth", item.optDouble("width", 0)) > 0 && item.optDouble("previewHeight", item.optDouble("height", 0)) > 0; }
     private double frameRatio(JSONObject collection) {
