@@ -24,7 +24,6 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
-import com.google.android.material.behavior.HideViewOnScrollBehavior;
 import com.google.android.material.slider.Slider;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.radiobutton.MaterialRadioButton;
@@ -74,7 +73,6 @@ public final class MainActivity extends AppCompatActivity {
     private static final int[] LOCATION_ICONS = {R.drawable.phone, R.drawable.desktop, R.drawable.history};
     private int TEXT, MUTED, ACCENT;
     private LinearLayout root, board, actions;
-    private HideViewOnScrollBehavior<LinearLayout> actionScroll;
     private MaterialButton collectionButton;
     private JSONArray collectionChoices = new JSONArray();
     private ListPopupWindow collectionMenu, locationMenu;
@@ -177,7 +175,7 @@ public final class MainActivity extends AppCompatActivity {
         AccessibilityManager accessibility = (AccessibilityManager)getSystemService(ACCESSIBILITY_SERVICE);
         AppBarLayout.Behavior headerScroll = new AppBarLayout.Behavior() {
             @Override public boolean onStartNestedScroll(CoordinatorLayout parent, AppBarLayout child, View direct, View target, int axes, int type) {
-                return !accessibility.isTouchExplorationEnabled() && !toolbar.hasFocus() && !searchLayout.hasFocus() && (child.getTop() < 0 || target.canScrollVertically(-1) || target.canScrollVertically(1)) && super.onStartNestedScroll(parent, child, direct, target, axes, type);
+                return !accessibility.isTouchExplorationEnabled() && !toolbar.hasFocus() && !searchLayout.hasFocus() && !actions.hasFocus() && (child.getTop() < 0 || target.canScrollVertically(-1) || target.canScrollVertically(1)) && super.onStartNestedScroll(parent, child, direct, target, axes, type);
             }
         };
         CoordinatorLayout.LayoutParams headerParams = new CoordinatorLayout.LayoutParams(-1, -2); headerParams.setBehavior(headerScroll); screen.addView(appBar, headerParams);
@@ -220,10 +218,8 @@ public final class MainActivity extends AppCompatActivity {
         pinGrid = new RecyclerView(this); pinGrid.setPadding(0, dp(4), 0, dp(80)); pinGrid.setClipToPadding(false); pinGrid.setHasFixedSize(true); pinGrid.setItemAnimator(null); pinGrid.setVisibility(View.GONE); canvas.addView(pinGrid, new FrameLayout.LayoutParams(-1, -1));
         pinGrid.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> { if (right - left != oldRight - oldLeft && pinGrid.getAdapter() != null) pinGrid.post(this::renderPins); });
         actions = row(); actions.setPadding(dp(16), dp(8), dp(16), dp(16));
-        actionScroll = new HideViewOnScrollBehavior<LinearLayout>(HideViewOnScrollBehavior.EDGE_BOTTOM) {
-            @Override public boolean onStartNestedScroll(CoordinatorLayout parent, LinearLayout child, View direct, View target, int axes, int type) { return !child.hasFocus() && super.onStartNestedScroll(parent, child, direct, target, axes, type); }
-        };
-        CoordinatorLayout.LayoutParams actionParams = new CoordinatorLayout.LayoutParams(-1, -2); actionParams.gravity = Gravity.BOTTOM; actionParams.setBehavior(actionScroll); screen.addView(actions, actionParams);
+        CoordinatorLayout.LayoutParams actionParams = new CoordinatorLayout.LayoutParams(-1, -2); actionParams.gravity = Gravity.BOTTOM; screen.addView(actions, actionParams);
+        appBar.addOnOffsetChangedListener((AppBarLayout.OnOffsetChangedListener)(bar, offset) -> syncBars(offset));
         locationButton = new ExtendedFloatingActionButton(this); locationButton.setTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodyLarge); locationButton.setSingleLine(true); locationButton.setEllipsize(android.text.TextUtils.TruncateAt.END); locationButton.setMinHeight(dp(48)); locationButton.setMinimumHeight(dp(48)); locationButton.setInsetTop(dp(4)); locationButton.setInsetBottom(dp(4)); locationButton.setPaddingRelative(dp(12), dp(8), dp(12), dp(8)); locationButton.setIconSize(dp(20)); locationButton.setIconPadding(dp(8)); locationButton.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.papan_primary_container))); locationButton.setTextColor(getColor(R.color.papan_on_primary_container)); locationButton.setIconTint(ColorStateList.valueOf(getColor(R.color.papan_on_primary_container))); locationButton.setOnClickListener(v -> chooseLocation()); actions.addView(locationButton, new LinearLayout.LayoutParams(-2, -2));
         View flexible = new View(this); actions.addView(flexible, new LinearLayout.LayoutParams(dp(12), 0, 1));
         addLink = new FloatingActionButton(this); addLink.setSize(FloatingActionButton.SIZE_MINI); addLink.setEnsureMinTouchTargetSize(true); addLink.setMaxImageSize(dp(20)); addLink.setImageResource(R.drawable.add); addLink.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); addLink.setImageTintList(ColorStateList.valueOf(getColor(R.color.papan_on_primary))); addLink.setContentDescription("Add link"); addLink.setOnClickListener(v -> enterLink()); actions.addView(addLink, new LinearLayout.LayoutParams(-2, -2));
@@ -236,6 +232,7 @@ public final class MainActivity extends AppCompatActivity {
             @Override public void onViewDetachedFromWindow(View view) { accessibility.removeTouchExplorationStateChangeListener(exploration); }
         });
         actions.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            syncBars(appBar.getTop());
             int width = 0; for (String label : LOCATION_LABELS) width = Math.max(width, (int)Math.ceil(locationButton.getPaint().measureText(label)));
             width += locationButton.getPaddingStart() + locationButton.getPaddingEnd() + locationButton.getIconSize() + locationButton.getIconPadding();
             width = Math.min(width, Math.max(dp(48), right - left - actions.getPaddingLeft() - actions.getPaddingRight() - addLink.getMeasuredWidth() - dp(12)));
@@ -335,7 +332,8 @@ public final class MainActivity extends AppCompatActivity {
         popup.getListView().setChoiceMode(selected < 0 ? android.widget.ListView.CHOICE_MODE_NONE : android.widget.ListView.CHOICE_MODE_SINGLE); if (selected >= 0) popup.getListView().setItemChecked(selected, true); popup.setSelection(Math.max(0, selected)); return popup;
     }
     private String collectionLabel(JSONObject value) { return value.optString("name") + (value.optBoolean("protected") ? " · protected" : ""); }
-    private void revealChrome() { actionScroll.slideIn(actions, false); appBar.setExpanded(true, false); }
+    private void syncBars(int offset) { actions.setTranslationY(appBar.getTotalScrollRange() > 0 ? -(float)offset * actions.getHeight() / appBar.getTotalScrollRange() : 0); }
+    private void revealChrome() { appBar.setExpanded(true, false); }
     private void showDestination(int id) {
         revealChrome();
         remote = id == 2; activityOpen = id == 3; boardGeneration++; gridKey = ""; handler.removeCallbacks(browsePoll); handler.removeCallbacks(searchPoll); search.setText(""); updateChrome();
@@ -459,7 +457,6 @@ public final class MainActivity extends AppCompatActivity {
             layout.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() { @Override public int getSpanSize(int position) { return adapter.getItemViewType(position) == 1 ? spanCount : 1; } });
             pinGrid.setLayoutManager(layout); pinGrid.setAdapter(adapter); if (first >= 0) layout.scrollToPositionWithOffset(Math.min(first, adapter.getItemCount() - 1), offset); gridKey = key;
             boardScroll.setVisibility(View.GONE); pinGrid.setVisibility(View.VISIBLE);
-            pinGrid.post(() -> { if (!pinGrid.canScrollVertically(-1)) actionScroll.slideIn(actions); });
         } catch (Exception error) { message(error.getMessage()); }
     }
     private final class PinAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {

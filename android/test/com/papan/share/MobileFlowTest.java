@@ -51,6 +51,7 @@ public final class MobileFlowTest extends Instrumentation {
     private String clipboardFixture;
     private int displayId;
     private float testFontScale = 1;
+    private final int[] barPixels = new int[6];
     @Override public Activity newActivity(ClassLoader loader, String name, Intent intent) throws InstantiationException, IllegalAccessException, ClassNotFoundException { Activity activity = super.newActivity(loader, name, intent); if (activity instanceof MainActivity) { android.content.res.Configuration config = new android.content.res.Configuration(); config.fontScale = testFontScale; activity.applyOverrideConfiguration(config); } return activity; }
     @Override public void callActivityOnCreate(Activity activity, Bundle saved) { super.callActivityOnCreate(activity, saved); if (activity instanceof MainActivity) main = (MainActivity)activity; }
     @Override public void onCreate(Bundle args) { super.onCreate(args); arguments = args; start(); }
@@ -159,6 +160,7 @@ public final class MobileFlowTest extends Instrumentation {
             if (!cameraOnly) result.putString("checks", result.getString("checks") + " Compact bottom controls retain 48dp tap targets with 40dp normal-size faces, stable scalable labels, dynamic scroll clearance and Add activation outside its visible face.");
             if (!cameraOnly) result.putString("checks", result.getString("checks") + " Real desktop-board swipes hide bottom controls on downward scrolling and restore them upward; refresh retains the hidden state and reference; reversal and keyboard recovery pass.");
             if (!cameraOnly) result.putString("checks", result.getString("checks") + " Native top bar quick-return reclaims its full height for previews; both bars retain their hidden state across refresh and restore through collection/Add keyboard focus.");
+            if (!cameraOnly) result.putString("checks", result.getString("checks") + " Shared top/bottom progress stays synchronized at every sampled native frame during remote hide/show, with intermediate motion and no independent bottom animation.");
             result.putString("status", "passed");
         } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); if (main != null) try { screenshot(main, "failure.png"); result.putString("screenStatus", ((TextView)field(main, "status")).getText().toString()); result.putString("visibleText", text(main)); result.putBoolean("paired", PhoneStore.get(main).snapshot().has("config")); } catch (Exception ignored) {} }
         finally {
@@ -192,17 +194,18 @@ public final class MobileFlowTest extends Instrumentation {
             await(() -> main.hasWindowFocus() && has("This collection is empty.") && ((View)field(main, "appBar")).getTop() == 0, 5000, "New empty collection did not finish opening."); require(((View)field(main, "actions")).getTranslationY() == 0, "New empty collection left navigation hidden.");
             click(main, "Short scroll fixture"); await(() -> grid().getItemCount() == 1 && ((View)field(main, "appBar")).getTop() == 0, 5000, "Short fixture did not open."); swipeBoard(true);
             require(((View)field(main, "appBar")).getTop() == 0 && ((View)field(main, "actions")).getTranslationY() == 0, "A short non-scrolling board hid navigation.");
-            result.putString("checks", "Real private-display swipes hide both bottom controls when scrolling down and restore them when scrolling up. The native top bar hides and quick-returns too; the actual preview viewport gains exactly its height with no blank gap. Same-board refresh retains both hidden bars and the visible reference. Rapid direction reversal settles correctly; keyboard focus reveals controls and Tab/Enter opens Add and the collection dropdown. Native touch-exploration protection stays enabled. Fresh/empty collections restore controls; short boards keep navigation visible. Compact sizes, 48dp targets and clearance pass at 300dp/360dp/640dp and 200% text. No physical phone used."); result.putString("status", "passed");
+            result.putString("checks", "Real private-display swipes hide both bottom controls when scrolling down and restore them when scrolling up. The native top bar hides and quick-returns too; the actual preview viewport gains exactly its height with no blank gap. Native frame samples and actual compositor pixels show shared top/bottom progress with intermediate hide/show motion. Same-board refresh retains both hidden bars and the visible reference. Rapid direction reversal settles correctly; keyboard focus reveals controls and Tab/Enter opens Add and the collection dropdown. Fresh/empty collections restore controls; short boards keep navigation visible. Compact sizes, 48dp targets and clearance pass at 300dp/360dp/640dp and 200% text. No physical phone used."); result.putString("status", "passed");
         } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); try { View actions = (View)field(main, "actions"); RecyclerView board = (RecyclerView)field(main, "pinGrid"); result.putString("scrollState", "width=" + main.getResources().getConfiguration().screenWidthDp + ",font=" + testFontScale + ",translation=" + actions.getTranslationY() + ",height=" + actions.getHeight() + ",focus=" + actions.hasFocus() + ",offset=" + board.computeVerticalScrollOffset() + ",up=" + board.canScrollVertically(-1) + ",down=" + board.canScrollVertically(1)); } catch (Exception ignored) {} }
         finally { onMain(() -> { if (main != null && !main.isDestroyed()) main.finishAndRemoveTask(); }); waitForIdleSync(); if (display != null) display.release(); if (output != null) output.close(); }
         finish("passed".equals(result.getString("status")) ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
     }
-    private void swipeBoard(boolean down) throws Exception {
+    private void swipeBoard(boolean down) throws Exception { swipeBoard(down, 450); }
+    private void swipeBoard(boolean down, int duration) throws Exception {
         require(displayId != Display.DEFAULT_DISPLAY && main.getDisplay().getDisplayId() == displayId, "Refusing a swipe outside the isolated display."); int[] point = new int[2]; int[] size = new int[2];
         getUiAutomation().waitForIdle(200, 3000);
         onMain(() -> { try { View board = (View)field(main, "pinGrid"); android.graphics.Rect visible = new android.graphics.Rect(); require(board.getGlobalVisibleRect(visible), "Board is outside the virtual viewport."); board.getRootView().getLocationOnScreen(point); point[0] += visible.left; point[1] += visible.top; size[0] = visible.width(); size[1] = visible.height(); } catch (Exception error) { throw new RuntimeException(error); } });
         int x = point[0] + size[0] / 2, upper = point[1] + size[1] / 4, lower = point[1] + size[1] * 3 / 4;
-        try (android.os.ParcelFileDescriptor.AutoCloseInputStream result = new android.os.ParcelFileDescriptor.AutoCloseInputStream(getUiAutomation().executeShellCommand("input -d " + displayId + " swipe " + x + " " + (down ? lower : upper) + " " + x + " " + (down ? upper : lower) + " 450"))) { require(result.read() == -1, "Virtual board swipe failed."); }
+        try (android.os.ParcelFileDescriptor.AutoCloseInputStream result = new android.os.ParcelFileDescriptor.AutoCloseInputStream(getUiAutomation().executeShellCommand("input -d " + displayId + " swipe " + x + " " + (down ? lower : upper) + " " + x + " " + (down ? upper : lower) + " " + duration))) { require(result.read() == -1, "Virtual board swipe failed."); }
         onMain(() -> { try { ((RecyclerView)field(main, "pinGrid")).stopScroll(); } catch (Exception error) { throw new RuntimeException(error); } });
     }
     private void scrollingControls(boolean capture) throws Exception {
@@ -211,14 +214,14 @@ public final class MobileFlowTest extends Instrumentation {
         View actions = (View)field(main, "actions"), header = (View)field(main, "appBar"); RecyclerView board = (RecyclerView)field(main, "pinGrid"); android.graphics.Rect shown = new android.graphics.Rect();
         await(() -> header.getTop() == 0, 5000, "Top bar did not initialize expanded."); onMain(() -> require(board.getGlobalVisibleRect(shown), "Expanded board is outside the viewport."));
         if (capture) screenshot(main, "scroll-controls-before.png");
-        swipeBoard(true); await(() -> actions.getTranslationY() >= actions.getHeight() && header.getBottom() <= 0 && board.canScrollVertically(-1), 5000, "Scrolling down did not clear the top and bottom controls.");
+        sharedBarSwipe(true, capture); await(() -> actions.getTranslationY() >= actions.getHeight() && header.getBottom() <= 0 && board.canScrollVertically(-1), 5000, "Scrolling down did not clear the top and bottom controls.");
         onMain(() -> { try { android.graphics.Rect visible = new android.graphics.Rect(); require(!((View)field(main, "locationButton")).getGlobalVisibleRect(visible) && !((View)field(main, "addLink")).getGlobalVisibleRect(visible), "Hidden controls still cover the preview viewport."); } catch (Exception error) { throw new RuntimeException(error); } });
         onMain(() -> { try { android.graphics.Rect visible = new android.graphics.Rect(); require(!((View)field(main, "toolbar")).getGlobalVisibleRect(visible), "Top bar still covers previews."); require(board.getGlobalVisibleRect(visible) && visible.height() - shown.height() == header.getHeight() && shown.top - visible.top == header.getHeight(), "Hiding the top bar left a gap instead of reclaiming its height."); } catch (Exception error) { throw new RuntimeException(error); } });
         if (capture) screenshot(main, "scroll-controls-hidden.png");
         int first = grid().findFirstVisibleItemPosition(), top = grid().getDecoratedTop(grid().findViewByPosition(first));
         onMain(() -> { try { Method refresh = MainActivity.class.getDeclaredMethod("renderPins"); refresh.setAccessible(true); refresh.invoke(main); } catch (Exception error) { throw new RuntimeException(error); } }); waitForIdleSync();
         await(() -> grid().findFirstVisibleItemPosition() == first, 5000, "Refresh changed the visible reference."); require(actions.getTranslationY() >= actions.getHeight() && header.getBottom() <= 0 && grid().getDecoratedTop(grid().findViewByPosition(first)) == top, "Refresh revealed controls or moved the board.");
-        swipeBoard(false); await(() -> actions.getTranslationY() == 0 && header.getTop() == 0, 5000, "Scrolling up did not restore top and bottom controls.");
+        sharedBarSwipe(false, capture); await(() -> actions.getTranslationY() == 0 && header.getTop() == 0, 5000, "Scrolling up did not restore top and bottom controls.");
         if (capture) screenshot(main, "scroll-controls-returned.png");
         swipeBoard(true); swipeBoard(false); await(() -> actions.getTranslationY() == 0 && header.getTop() == 0, 5000, "Direction reversal left controls hidden.");
         swipeBoard(true); await(() -> header.getBottom() <= 0, 5000, "Top bar did not hide before keyboard recovery."); key(android.view.KeyEvent.KEYCODE_TAB);
@@ -228,9 +231,43 @@ public final class MobileFlowTest extends Instrumentation {
         key(android.view.KeyEvent.KEYCODE_TAB);
         onMain(() -> { try { require(((View)field(main, "locationButton")).requestFocus(), "Location could not receive keyboard focus."); } catch (Exception error) { throw new RuntimeException(error); } });
         await(() -> actions.getTranslationY() == 0 && header.getTop() == 0, 5000, "Keyboard focus did not reveal the controls."); key(android.view.KeyEvent.KEYCODE_TAB); require(((View)field(main, "addLink")).hasFocus(), "Tab did not reach Add after keyboard recovery."); key(android.view.KeyEvent.KEYCODE_ENTER); await(() -> has("Add a link"), 5000, "Keyboard-revealed Add could not open its dialog."); click(main, "Cancel");
-        com.google.android.material.behavior.HideViewOnScrollBehavior<?> behavior = (com.google.android.material.behavior.HideViewOnScrollBehavior<?>)field(main, "actionScroll"); require(behavior.isDisabledOnTouchExploration(), "Scroll hiding disabled native touch-exploration protection.");
         onMain(() -> { try { ((View)field(main, "locationButton")).clearFocus(); ((View)field(main, "addLink")).clearFocus(); board.scrollToPosition(0); } catch (Exception error) { throw new RuntimeException(error); } });
         await(() -> grid().findFirstVisibleItemPosition() == 0, 5000, "Scroll check did not restore the first row.");
+    }
+    private int wordmarkBottom(Bitmap frame, int color) {
+        for (int y = Math.min(frame.getHeight(), barPixels[2]) - 1; y >= 0; y--) for (int x = barPixels[0]; x < barPixels[1]; x += 2) if (colorDifference(frame.getPixel(x, y), color) <= 1) return y;
+        return -1;
+    }
+    private int locationTop(Bitmap frame, int color) {
+        for (int y = Math.max(0, barPixels[5] - 2); y < frame.getHeight(); y++) if (colorDifference(frame.getPixel(barPixels[3], y), color) <= 1) return y;
+        return -1;
+    }
+    private void sharedBarSwipe(boolean down, boolean pixels) throws Exception {
+        require(displayId != Display.DEFAULT_DISPLAY && main.getDisplay().getDisplayId() == displayId, "Motion checks require the private display.");
+        com.google.android.material.appbar.AppBarLayout header = (com.google.android.material.appbar.AppBarLayout)field(main, "appBar"); View actions = (View)field(main, "actions");
+        java.util.List<double[]> samples = java.util.Collections.synchronizedList(new java.util.ArrayList<>()); java.util.List<Bitmap> frames = java.util.Collections.synchronizedList(new java.util.ArrayList<>()); boolean[] recording = {true};
+        android.view.Choreographer.FrameCallback sampler = new android.view.Choreographer.FrameCallback() { @Override public void doFrame(long time) { if (!recording[0]) return; samples.add(new double[] {-(double)header.getTop() / header.getTotalScrollRange(), actions.getTranslationY() / actions.getHeight()}); android.view.Choreographer.getInstance().postFrameCallback(this); } };
+        try {
+            onMain(() -> { android.view.Choreographer.getInstance().postFrameCallback(sampler); if (pixels) { output.setOnImageAvailableListener(reader -> { try (Image frame = reader.acquireLatestImage()) { if (frame != null && frames.size() < 18) frames.add(displayFrame(frame)); } }, new Handler(Looper.getMainLooper())); main.getWindow().getDecorView().invalidate(); } });
+            if (pixels) {
+                await(() -> !frames.isEmpty(), 5000, "Compositor did not produce a motion baseline.");
+                if (down) onMain(() -> { try { View brand = description(main.getWindow().getDecorView(), "Papan"), location = (View)field(main, "locationButton"); int[] point = new int[2]; brand.getLocationOnScreen(point); barPixels[0] = point[0]; barPixels[1] = point[0] + brand.getWidth(); barPixels[2] = header.getBottom(); location.getLocationOnScreen(point); barPixels[3] = point[0] + location.getWidth() / 2; Bitmap before = frames.get(frames.size() - 1); barPixels[4] = wordmarkBottom(before, main.getColor(R.color.papan_on_surface)); barPixels[5] = locationTop(before, main.getColor(R.color.papan_primary_container)); require(barPixels[4] >= 0 && barPixels[5] >= 0, "Native bar pixels were not identifiable."); } catch (Exception error) { throw new RuntimeException(error); } });
+                onMain(() -> { for (Bitmap frame : new java.util.ArrayList<>(frames)) frame.recycle(); frames.clear(); });
+            }
+            swipeBoard(down, 900); await(() -> down ? header.getBottom() <= 0 : header.getTop() == 0, 5000, "Native bar transition did not settle.");
+            onMain(() -> { recording[0] = false; android.view.Choreographer.getInstance().removeFrameCallback(sampler); if (pixels) output.setOnImageAvailableListener(reader -> { try (Image frame = reader.acquireLatestImage()) {} }, new Handler(Looper.getMainLooper())); });
+            double error = 0; int intermediate = 0; org.json.JSONArray steps = new org.json.JSONArray();
+            for (double[] sample : new java.util.ArrayList<>(samples)) { error = Math.max(error, Math.abs(sample[0] - sample[1])); if (sample[0] > .02 && sample[0] < .98) intermediate++; steps.put(new org.json.JSONArray().put(sample[0]).put(sample[1])); }
+            int paired = 0, first = -1, last = -1; double pixelError = 0;
+            for (int n = 0; n < frames.size(); n++) { Bitmap frame = frames.get(n); int glyph = wordmarkBottom(frame, main.getColor(R.color.papan_on_surface)), green = locationTop(frame, main.getColor(R.color.papan_primary_container)); if (glyph < 0 || green < 0) continue; double top = (double)(barPixels[4] - glyph) / header.getTotalScrollRange(), bottom = (double)(green - barPixels[5]) / actions.getHeight(); if (top <= .02 || top >= .8) continue; paired++; pixelError = Math.max(pixelError, Math.abs(top - bottom)); if (first < 0) first = n; last = n; }
+            boolean passed = intermediate >= 2 && error < .01 && (!pixels || paired >= 2 && pixelError < .025);
+            if (pixels) {
+                String direction = down ? "hide" : "show"; JSONObject proof = new JSONObject().put("status", passed ? "passed" : "failed").put("displayId", displayId).put("compositorFrames", frames.size()).put("pairedMovingFrames", paired).put("nativeSamples", samples.size()).put("intermediateSamples", intermediate).put("maxNativePhaseDifference", error).put("maxPixelPhaseDifference", pixelError).put("progress", steps);
+                try (FileOutputStream file = new FileOutputStream(new File(main.getFilesDir(), "bar-motion-" + direction + ".json"))) { file.write(proof.toString(2).getBytes(java.nio.charset.StandardCharsets.UTF_8)); }
+                if (first >= 0) for (String name : new String[] {"first", "last"}) try (FileOutputStream file = new FileOutputStream(new File(main.getFilesDir(), "bar-motion-" + direction + "-" + name + ".png"))) { frames.get(name.equals("first") ? first : last).compress(Bitmap.CompressFormat.PNG, 100, file); }
+            }
+            require(passed, "Bars staggered or jumped during " + (down ? "hide" : "show") + ": native phase difference=" + error + ", pixel phase difference=" + pixelError + ", intermediate frames=" + intermediate + ", paired compositor frames=" + paired);
+        } finally { onMain(() -> { recording[0] = false; android.view.Choreographer.getInstance().removeFrameCallback(sampler); if (pixels) output.setOnImageAvailableListener(reader -> { try (Image frame = reader.acquireLatestImage()) {} }, new Handler(Looper.getMainLooper())); }); for (Bitmap frame : new java.util.ArrayList<>(frames)) if (!frame.isRecycled()) frame.recycle(); }
     }
     private void locationOnly() {
         Bundle result = new Bundle();
