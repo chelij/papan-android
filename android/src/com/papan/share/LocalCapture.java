@@ -13,6 +13,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -78,7 +79,8 @@ public final class LocalCapture {
                     }
                     String ext = extension(source.type);
                     if (!ext.isEmpty()) {
-                        String filename = id + "." + ext; saved = store.mediaFile(filename); savedWasNew = !saved.exists(); AtomicFile media = new AtomicFile(saved); FileOutputStream stream = null;
+                        // Keep the current cache intact and reuse an uncommitted replacement across retries.
+                        String filename = UUID.nameUUIDFromBytes((id + ":" + pin.optString("mediaFile") + ":" + ext).getBytes(StandardCharsets.UTF_8)) + "." + ext; saved = store.mediaFile(filename); savedWasNew = !saved.exists(); AtomicFile media = new AtomicFile(saved); FileOutputStream stream = null;
                         try { stream = media.startWrite(); stream.write(source.bytes); media.finishWrite(stream); } catch (Exception error) { media.failWrite(stream); throw error; }
                         details.put("mediaFile", filename).put("kind", source.type.startsWith("video/") ? "video" : "image");
                     }

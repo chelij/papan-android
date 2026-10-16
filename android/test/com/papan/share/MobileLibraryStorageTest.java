@@ -9,6 +9,13 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
 import java.lang.reflect.Field;
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStreamReader;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Arrays;
 
@@ -20,6 +27,40 @@ public final class MobileLibraryStorageTest extends Instrumentation {
         JSONArray pins = store.snapshot().getJSONArray("pins");
         for (int i = 0; i < pins.length(); i++) if (id.equals(pins.getJSONObject(i).getString("id"))) return pins.getJSONObject(i);
         throw new AssertionError("Saved pin missing.");
+    }
+    private static byte[] image(int color) {
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(2, 2, android.graphics.Bitmap.Config.ARGB_8888);
+        bitmap.eraseColor(color); ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, bytes); bitmap.recycle(); return bytes.toByteArray();
+    }
+    private static void captureRollback(MobileLibrary store, Context context, File database) throws Exception {
+        byte[] original = image(android.graphics.Color.RED), replacement = image(android.graphics.Color.BLUE);
+        try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
+            Thread responder = new Thread(() -> {
+                while (!server.isClosed()) try (Socket socket = server.accept()) {
+                    BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
+                    String line; while ((line = input.readLine()) != null && !line.isEmpty()) {}
+                    socket.getOutputStream().write(("HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: " + replacement.length + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+                    socket.getOutputStream().write(replacement);
+                } catch (java.io.IOException error) { if (server.isClosed()) return; }
+            }); responder.setDaemon(true); responder.start();
+            String collection = store.create("Capture rollback"), id = store.add(collection, "http://127.0.0.1:" + server.getLocalPort() + "/capture.png");
+            File cached = store.mediaFile(id + ".png"); Files.write(cached.toPath(), original);
+            store.captured(id, new JSONObject().put("mediaFile", cached.getName()).put("kind", "image").put("capture", "saved")); store.retry(id);
+            byte[] previous = Files.readAllBytes(database.toPath());
+            File blocked = new File(database + ".new"), marker = new File(blocked, "fixture");
+            require(blocked.mkdir() && marker.createNewFile(), "Could not block the capture commit.");
+            boolean failed = false;
+            try { LocalCapture.sync(context); } catch (Exception expected) { failed = true; }
+            finally { marker.delete(); blocked.delete(); }
+            require(failed && Arrays.equals(previous, Files.readAllBytes(database.toPath())), "Failed capture commit changed the library.");
+            require(Arrays.equals(original, Files.readAllBytes(cached.toPath())), "Failed same-extension capture overwrote the existing preview.");
+            require(new File(context.getFilesDir(), "mobile-media").list().length == 1, "Failed capture left an unused media file.");
+            LocalCapture.sync(context);
+            File captured = store.mediaFile(pin(store, id).getString("mediaFile"));
+            require(!cached.exists() && Arrays.equals(replacement, Files.readAllBytes(captured.toPath())), "Successful recapture did not replace and clean up the old preview.");
+            store.removeCollection(collection);
+        }
     }
     @Override public void onCreate(Bundle args) { super.onCreate(args); start(); }
     @Override public void onStart() {
@@ -72,7 +113,9 @@ public final class MobileLibraryStorageTest extends Instrumentation {
             store.removeCollection(collection);
             require(!replacement.exists() && store.snapshot().getJSONArray("pins").length() == 0, "Collection deletion left its cached preview.");
             require(new File(context.getFilesDir(), "mobile-media").list().length == 0, "Unused preview files remain.");
-            result.putString("stream", "Mobile storage checks passed: replacement, retained cache, failed commit, reopen, shared ownership, and final cleanup.\n");
+            captureRollback(store, context, database);
+            require(new File(context.getFilesDir(), "mobile-media").list().length == 0, "Recapture cleanup left media behind.");
+            result.putString("stream", "Mobile storage checks passed: replacement, retained cache, failed commit, reopen, shared ownership, final cleanup, actual HTTP recapture rollback, and successful retry.\n");
             finish(Activity.RESULT_OK, result);
         } catch (Throwable error) {
             result.putString("stream", "Mobile storage check failed: " + android.util.Log.getStackTraceString(error));
