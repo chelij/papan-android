@@ -42,8 +42,14 @@ Install Node.js 24.15+, JDK 17+, and Android SDK **platform 35 / build-tools 35.
 git clone https://github.com/chelij/papan-android.git
 cd papan-android
 npm run check
+npm run test:links
+npm run test:capture
 npm run build:android
 ```
+
+`test:links` compiles and runs the production shared-link parser using only the JDK. It checks exact URL preservation and invalid-input rejection without the Android SDK, a device, or an APK installation. Directly pasted or shared URLs retain punctuation in their paths and query values; links extracted from surrounding prose retain the existing sentence-punctuation cleanup.
+
+`test:capture` uses the JDK and Android SDK platform 35 to run the real capture HTTP fetcher against a disposable local server. It checks media-type parameters, image/video extensions, exact response bytes, and XHTML responses at and above the 1 MiB page limit, with both fixed-length and chunked transfers. It does not install an APK or exercise Android UI or storage.
 
 No npm runtime dependencies or system Gradle installation are needed. The wrapper downloads checksum-pinned Gradle 8.13. Android Gradle Plugin 8.9.3, Material Components 1.13.0, AndroidX and ZXing core 3.5.4 are pinned in Gradle dependency locks and checked against committed SHA-256 verification metadata. The signed APK and SHA-256 file appear in `dist/`; source and dependency licenses are also embedded in the APK.
 
@@ -56,6 +62,14 @@ Build the isolated test package:
 ```sh
 npm run build:android -- --test
 ```
+
+For native storage regressions, choose a booted disposable headless emulator and run:
+
+```sh
+PAPAN_ANDROID_SERIAL=emulator-5556 npm run test:storage
+```
+
+This command installs and resets only `com.papan.share.test` on the selected emulator. It rejects physical devices and checks preview replacement, retained caches, failed-write recovery, storage reopening, shared-file ownership and final cleanup without opening an Activity. Do not use an emulator that another task owns.
 
 Then, from a [Papan desktop checkout](https://github.com/chelij/papan) with its development dependencies installed:
 
