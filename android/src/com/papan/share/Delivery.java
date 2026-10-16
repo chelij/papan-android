@@ -15,6 +15,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class Delivery {
+    public static final class RequestException extends Exception {
+        public final int status;
+        RequestException(int status, String message) { super(message); this.status = status; }
+    }
     private static final AtomicBoolean syncing = new AtomicBoolean(false);
     public static String endpoint(String value) throws Exception {
         URI uri = new URI(value.trim()); String host = uri.getHost();
@@ -40,10 +44,17 @@ public final class Delivery {
         return config;
     }
     public static JSONObject request(String endpoint, String route, String token, JSONObject body) throws Exception {
+        return request(endpoint, route, token, body, 10000);
+    }
+    static JSONObject request(String endpoint, String route, String token, JSONObject body, int timeout) throws Exception {
+        return request(endpoint, route, token, body, timeout, "");
+    }
+    static JSONObject request(String endpoint, String route, String token, JSONObject body, int timeout, String session) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new java.net.URL(endpoint + route).openConnection();
-        connection.setConnectTimeout(5000); connection.setReadTimeout(10000); connection.setInstanceFollowRedirects(false);
+        connection.setConnectTimeout(Math.min(5000, timeout)); connection.setReadTimeout(timeout); connection.setInstanceFollowRedirects(false);
         connection.setRequestProperty("Accept", "application/json");
         if (!token.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + token);
+        if (!session.isEmpty()) connection.setRequestProperty("X-Papan-Session", session);
         try {
             if (body != null) {
                 connection.setRequestMethod("POST"); connection.setDoOutput(true); connection.setRequestProperty("Content-Type", "application/json");
@@ -56,10 +67,10 @@ public final class Delivery {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (InputStream stream = input) {
                 byte[] buffer = new byte[4096]; int length;
-                while ((length = stream.read(buffer)) != -1) { if (bytes.size() + length > 32768) throw new Exception("Desktop response is too large."); bytes.write(buffer, 0, length); }
+                while ((length = stream.read(buffer)) != -1) { if (bytes.size() + length > 2 * 1024 * 1024) throw new Exception("Desktop response is too large."); bytes.write(buffer, 0, length); }
             }
             JSONObject result = new JSONObject(new String(bytes.toByteArray(), StandardCharsets.UTF_8));
-            if (status < 200 || status >= 300) throw new Exception(result.optString("error", "Desktop returned HTTP " + status + "."));
+            if (status < 200 || status >= 300) throw new RequestException(status, result.optString("error", "Desktop returned HTTP " + status + "."));
             return result;
         } catch (java.io.IOException error) { throw new Exception("Desktop unavailable. Check Papan, Wi-Fi, and the desktop firewall.", error); }
         finally { connection.disconnect(); }
@@ -73,13 +84,14 @@ public final class Delivery {
         try {
             PhoneStore store = PhoneStore.get(context); JSONObject state = store.snapshot();
             if (!state.has("config")) return false;
-            JSONObject config = state.getJSONObject("config"); JSONArray entries = state.getJSONArray("entries");
-            String endpoint = endpoint(config.getString("endpoint")), token = config.getString("token");
+            JSONArray entries = state.getJSONArray("entries");
             for (int i = 0; i < entries.length() && !cancelled.get(); i++) {
                 JSONObject entry = entries.getJSONObject(i); String id = entry.getString("id"); boolean received = entry.optBoolean("received");
                 try {
-                    JSONObject receipt = request(endpoint, received ? "/v1/shares/" + id : "/v1/shares", token,
-                        received ? null : new JSONObject().put("id", id).put("url", entry.getString("url")));
+                    JSONObject payload = new JSONObject().put("id", id).put("url", entry.getString("url"));
+                    if (entry.has("collectionId")) payload.put("collectionId", entry.getString("collectionId"));
+                    JSONObject receipt = DesktopConnection.request(context, received ? "/v1/shares/" + id : "/v1/shares",
+                        received ? null : payload);
                     if (!receipt.getString("id").equals(id) || !receipt.optBoolean("received")) throw new Exception("Invalid share receipt.");
                     if ("saved".equals(receipt.getString("state"))) store.remove(id, true);
                     else store.update(id, true, "failed".equals(receipt.getString("state")) ? "received by Papan · " + receipt.optString("error") : "received by Papan · waiting to save");

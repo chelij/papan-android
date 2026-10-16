@@ -11,6 +11,7 @@ import java.util.UUID;
 
 // Only app-private storage is used; Android backups are disabled in the manifest.
 public final class PhoneStore {
+    public static final String PAIRING_PENDING = "Links are waiting for your paired desktop. It reconnects automatically on this network. Send or dismiss those links in Activity before pairing a different desktop.";
     private static PhoneStore instance;
     private final AtomicFile file;
     private JSONObject state;
@@ -32,21 +33,34 @@ public final class PhoneStore {
         catch (Exception error) { file.failWrite(stream); throw error; }
     }
     public synchronized String enqueue(String url) throws Exception {
+        return enqueue(url, "", "Desktop default");
+    }
+    public synchronized String enqueue(String url, String collectionId, String collectionName) throws Exception {
+        if (!LocalCapture.webLink(url).equals(url)) throw new Exception("Use a complete web link.");
         JSONObject next = snapshot(); JSONArray entries = next.getJSONArray("entries");
-        for (int i = 0; i < entries.length(); i++) if (entries.getJSONObject(i).getString("url").equals(url)) return entries.getJSONObject(i).getString("id");
+        if (!collectionId.isEmpty() && !collectionId.matches("[a-fA-F0-9-]{36}")) throw new Exception("Choose a collection.");
+        for (int i = 0; i < entries.length(); i++) if (entries.getJSONObject(i).getString("url").equals(url) && entries.getJSONObject(i).optString("collectionId").equals(collectionId)) return entries.getJSONObject(i).getString("id");
         if (entries.length() >= 100) throw new Exception("Phone queue is full. Deliver or dismiss existing links first.");
         String id = UUID.randomUUID().toString();
-        entries.put(new JSONObject().put("id", id).put("url", url).put("received", false).put("status", "queued on phone"));
+        JSONObject entry = new JSONObject().put("id", id).put("url", url).put("received", false).put("status", "queued on phone").put("collectionName", collectionName);
+        if (!collectionId.isEmpty()) entry.put("collectionId", collectionId);
+        entries.put(entry);
         commit(next); return id;
     }
     public synchronized void pair(JSONObject config) throws Exception {
         JSONObject next = snapshot();
-        if (next.has("config") && next.getJSONArray("entries").length() != 0) throw new Exception("Deliver or dismiss pending links before replacing your pairing. To reconnect to the same desktop, update its address instead.");
+        if (next.has("config") && next.getJSONArray("entries").length() != 0) throw new Exception(PAIRING_PENDING);
         next.put("config", config); commit(next);
     }
     public synchronized void endpoint(String endpoint) throws Exception {
         JSONObject next = snapshot(); if (!next.has("config")) throw new Exception("Pair a desktop first.");
         next.getJSONObject("config").put("endpoint", endpoint); commit(next);
+    }
+    public synchronized boolean reconnect(JSONObject paired, String endpoint) throws Exception {
+        JSONObject next = snapshot(), current = next.optJSONObject("config");
+        if (current == null || !current.optString("serverId").equals(paired.optString("serverId")) || !current.optString("deviceId").equals(paired.optString("deviceId")) || !current.optString("token").equals(paired.optString("token"))) return false;
+        if (!current.optString("endpoint").equals(paired.optString("endpoint"))) return current.optString("endpoint").equals(endpoint);
+        current.put("endpoint", Delivery.endpoint(endpoint)); commit(next); return true;
     }
     public synchronized void update(String id, boolean received, String status) throws Exception {
         JSONObject next = snapshot(); JSONArray entries = next.getJSONArray("entries");
