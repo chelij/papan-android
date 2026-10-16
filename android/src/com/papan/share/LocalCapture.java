@@ -22,10 +22,7 @@ public final class LocalCapture {
     private static final java.util.concurrent.ExecutorService captures = java.util.concurrent.Executors.newSingleThreadExecutor();
     public static void submit(Context context, java.util.function.Consumer<Exception> finished) { captures.execute(() -> { Exception failure = null; try { sync(context); } catch (Exception error) { failure = error; } finished.accept(failure); }); }
     public static String webLink(String text) throws Exception {
-        if (text == null || text.length() > 16384) throw new Exception("Paste or share a web link.");
-        Matcher found = Pattern.compile("https?://[^\\s<>]+", Pattern.CASE_INSENSITIVE).matcher(text);
-        if (!found.find()) throw new Exception("No web link was found.");
-        String url = found.group().replaceAll("[.,;!]+$", ""); validate(url); return url;
+        return SharedLink.parse(text);
     }
     private static URI validate(String value) throws Exception {
         URI uri = new URI(value);
@@ -41,8 +38,8 @@ public final class LocalCapture {
                 int status = connection.getResponseCode();
                 if (status >= 300 && status < 400) { String location = connection.getHeaderField("Location"); if (location == null) throw new Exception("Missing redirect address."); value = uri.resolve(location).toString(); continue; }
                 if (status != 200) throw new Exception("Source returned HTTP " + status + ".");
-                Content result = new Content(); result.type = connection.getContentType() == null ? "" : connection.getContentType().split(";")[0].toLowerCase(Locale.ROOT); result.url = value;
-                int limit = result.type.startsWith("text/") ? Math.min(maximum, 1024 * 1024) : maximum;
+                Content result = new Content(); result.type = connection.getContentType() == null ? "" : connection.getContentType().split(";")[0].trim().toLowerCase(Locale.ROOT); result.url = value;
+                int limit = result.type.startsWith("text/") || result.type.equals("application/xhtml+xml") ? Math.min(maximum, 1024 * 1024) : maximum;
                 if (connection.getContentLengthLong() > limit) throw new Exception("Media is too large to save on the phone.");
                 try (InputStream input = connection.getInputStream(); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) { byte[] buffer = new byte[8192]; int size; while ((size = input.read(buffer)) != -1) { if (bytes.size() + size > limit) throw new Exception("Source is too large to preview on the phone."); bytes.write(buffer, 0, size); } result.bytes = bytes.toByteArray(); }
                 return result;

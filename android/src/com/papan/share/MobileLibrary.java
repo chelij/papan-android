@@ -7,6 +7,9 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 public final class MobileLibrary {
@@ -62,9 +65,12 @@ public final class MobileLibrary {
         JSONObject next = snapshot(); JSONArray pins = next.getJSONArray("pins");
         for (int i = 0; i < pins.length(); i++) if (pins.getJSONObject(i).getString("id").equals(id)) {
             JSONObject pin = pins.getJSONObject(i);
+            String previous = pin.optString("mediaFile");
             for (String key : new String[] { "mediaFile", "kind", "capture", "captureError" }) if (details.has(key)) pin.put(key, details.get(key));
             if (details.has("title") && !pin.optBoolean("edited")) pin.put("title", details.getString("title"));
-            commit(next); return true;
+            commit(next);
+            if (!previous.isEmpty() && !previous.equals(pin.optString("mediaFile"))) deleteUnusedMedia(previous);
+            return true;
         }
         return false;
     }
@@ -83,7 +89,20 @@ public final class MobileLibrary {
         next.put("pins", remaining);
         if (collection) { JSONArray collections = next.getJSONArray("collections"), kept = new JSONArray(); for (int i = 0; i < collections.length(); i++) if (!collections.getJSONObject(i).getString("id").equals(id)) kept.put(collections.getJSONObject(i)); next.put("collections", kept); }
         commit(next);
-        for (int i = 0; i < removed.length(); i++) { File saved = mediaFile(removed.getJSONObject(i).optString("mediaFile")); if (saved != null) saved.delete(); }
+        String[] names = new String[removed.length()];
+        for (int i = 0; i < removed.length(); i++) names[i] = removed.getJSONObject(i).optString("mediaFile");
+        deleteUnusedMedia(names);
+    }
+    private void deleteUnusedMedia(String... names) {
+        Set<String> unused = new HashSet<>(Arrays.asList(names));
+        JSONArray pins = state.optJSONArray("pins");
+        if (pins == null) return;
+        for (int i = 0; i < pins.length(); i++) {
+            JSONObject pin = pins.optJSONObject(i);
+            if (pin == null) return;
+            unused.remove(pin.optString("mediaFile"));
+        }
+        for (String name : unused) { File saved = mediaFile(name); if (saved != null) saved.delete(); }
     }
     public File mediaFile(String name) {
         return name.matches("[a-fA-F0-9-]{36}\\.(jpg|png|webp|gif|mp4|webm)") ? new File(media, name) : null;

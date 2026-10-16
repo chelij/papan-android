@@ -3,4 +3,5 @@
     <activity android:name="com.papan.share.MainActivity"><intent-filter tools:node="removeAll" /></activity>
   </application>
   <instrumentation android:name="com.papan.share.MobileFlowTest" android:targetPackage="com.papan.share.test" />
+  <instrumentation android:name="com.papan.share.MobileLibraryStorageTest" android:targetPackage="com.papan.share.test" />
 </manifest>
