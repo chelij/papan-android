@@ -13,6 +13,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.core.widget.NestedScrollView;
 import androidx.appcompat.view.ContextThemeWrapper;
 import com.google.android.material.appbar.MaterialToolbar;
+import com.google.android.material.appbar.AppBarLayout;
 import androidx.appcompat.widget.ListPopupWindow;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
@@ -50,6 +51,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.accessibility.AccessibilityManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -77,6 +79,7 @@ public final class MainActivity extends AppCompatActivity {
     private JSONArray collectionChoices = new JSONArray();
     private ListPopupWindow collectionMenu, locationMenu;
     private MaterialToolbar toolbar;
+    private AppBarLayout appBar;
     private ExtendedFloatingActionButton locationButton;
     private FloatingActionButton addLink;
     private TextInputLayout searchLayout;
@@ -168,7 +171,18 @@ public final class MainActivity extends AppCompatActivity {
             view.setPadding(bars.left, bars.top, bars.right, Math.max(bars.bottom, keyboard.bottom));
             return WindowInsetsCompat.CONSUMED;
         });
-        toolbar = new MaterialToolbar(this); toolbar.setTouchscreenBlocksFocus(false); toolbar.setContentInsetsRelative(dp(12), dp(8)); toolbar.setBackgroundColor(getColor(R.color.papan_background)); root.addView(toolbar, new LinearLayout.LayoutParams(-1, -2));
+        CoordinatorLayout screen = new CoordinatorLayout(this); root.addView(screen, new LinearLayout.LayoutParams(-1, 0, 1));
+        appBar = new AppBarLayout(this); appBar.setBackgroundColor(getColor(R.color.papan_background)); appBar.setElevation(0); appBar.setStateListAnimator(null);
+        appBar.setTouchscreenBlocksFocus(false); appBar.setKeyboardNavigationCluster(false);
+        AccessibilityManager accessibility = (AccessibilityManager)getSystemService(ACCESSIBILITY_SERVICE);
+        AppBarLayout.Behavior headerScroll = new AppBarLayout.Behavior() {
+            @Override public boolean onStartNestedScroll(CoordinatorLayout parent, AppBarLayout child, View direct, View target, int axes, int type) {
+                return !accessibility.isTouchExplorationEnabled() && !toolbar.hasFocus() && !searchLayout.hasFocus() && (child.getTop() < 0 || target.canScrollVertically(-1) || target.canScrollVertically(1)) && super.onStartNestedScroll(parent, child, direct, target, axes, type);
+            }
+        };
+        CoordinatorLayout.LayoutParams headerParams = new CoordinatorLayout.LayoutParams(-1, -2); headerParams.setBehavior(headerScroll); screen.addView(appBar, headerParams);
+        toolbar = new MaterialToolbar(this); toolbar.setTouchscreenBlocksFocus(false); toolbar.setContentInsetsRelative(dp(12), dp(8)); toolbar.setBackgroundColor(getColor(R.color.papan_background));
+        AppBarLayout.LayoutParams toolbarParams = new AppBarLayout.LayoutParams(-1, -2); toolbarParams.setScrollFlags(AppBarLayout.LayoutParams.SCROLL_FLAG_SCROLL | AppBarLayout.LayoutParams.SCROLL_FLAG_ENTER_ALWAYS | AppBarLayout.LayoutParams.SCROLL_FLAG_SNAP); appBar.addView(toolbar, toolbarParams);
         LinearLayout identity = row(); TextView brand = new TextView(this); brand.setText("papan."); brand.setTextAppearance(this, R.style.PapanBrand); brand.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 23); brand.setTextColor(TEXT); brand.setContentDescription("Papan"); identity.addView(brand);
         collectionButton = new MaterialButton(new ContextThemeWrapper(this, R.style.PapanTextButtonOverlay)); collectionButton.setTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodyLarge); collectionButton.setAllCaps(false); collectionButton.setSingleLine(true); collectionButton.setEllipsize(android.text.TextUtils.TruncateAt.END); collectionButton.setMinWidth(dp(48)); collectionButton.setMinimumWidth(dp(48)); collectionButton.setMinHeight(dp(48)); collectionButton.setMinimumHeight(dp(48)); collectionButton.setInsetTop(0); collectionButton.setInsetBottom(0); collectionButton.setPaddingRelative(dp(8), 0, dp(4), 0); collectionButton.setIconResource(com.google.android.material.R.drawable.mtrl_ic_arrow_drop_down); collectionButton.setIconGravity(MaterialButton.ICON_GRAVITY_END); collectionButton.setIconPadding(dp(4)); collectionButton.setIconSize(dp(24)); collectionButton.setTextColor(TEXT); collectionButton.setIconTint(ColorStateList.valueOf(MUTED)); collectionButton.setOnClickListener(v -> chooseCollection()); identity.addView(collectionButton, new LinearLayout.LayoutParams(0, -2, 1));
         toolbar.addView(identity, new androidx.appcompat.widget.Toolbar.LayoutParams(-1, -2, Gravity.START | Gravity.CENTER_VERTICAL));
@@ -195,26 +209,32 @@ public final class MainActivity extends AppCompatActivity {
             }
             return true;
         });
-        LinearLayout content = column(); root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
+        LinearLayout content = column(); CoordinatorLayout.LayoutParams contentParams = new CoordinatorLayout.LayoutParams(-1, -1); contentParams.setBehavior(new AppBarLayout.ScrollingViewBehavior()); screen.addView(content, contentParams);
         heading = text("", 14); heading.setTextColor(MUTED); heading.setPadding(dp(16), dp(8), dp(16), dp(8)); heading.setVisibility(View.GONE); content.addView(heading);
         search = field("Search this collection", false); search.setContentDescription("Search this collection"); search.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(500) }); searchLayout = fieldLayout(search);
         searchLayout.setVisibility(View.GONE);
         LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(-1, -2); searchParams.setMargins(dp(16), 0, dp(16), dp(8)); content.addView(searchLayout, searchParams);
         search.addTextChangedListener(new TextWatcher() { public void beforeTextChanged(CharSequence value,int start,int count,int after) {} public void onTextChanged(CharSequence value,int start,int before,int count) { if (activityOpen) return; if (remote) { boardGeneration++; handler.removeCallbacks(searchPoll); handler.postDelayed(searchPoll, 250); } else renderPins(); } public void afterTextChanged(Editable value) {} });
-        CoordinatorLayout canvas = new CoordinatorLayout(this); content.addView(canvas, new LinearLayout.LayoutParams(-1, 0, 1));
-        boardScroll = new NestedScrollView(this); boardScroll.setFillViewport(true); board = column(); board.setPadding(dp(16), dp(4), dp(16), dp(80)); boardScroll.addView(board); canvas.addView(boardScroll, new CoordinatorLayout.LayoutParams(-1, -1));
-        pinGrid = new RecyclerView(this); pinGrid.setPadding(0, dp(4), 0, dp(80)); pinGrid.setClipToPadding(false); pinGrid.setHasFixedSize(true); pinGrid.setItemAnimator(null); pinGrid.setVisibility(View.GONE); canvas.addView(pinGrid, new CoordinatorLayout.LayoutParams(-1, -1));
+        FrameLayout canvas = new FrameLayout(this); content.addView(canvas, new LinearLayout.LayoutParams(-1, 0, 1));
+        boardScroll = new NestedScrollView(this); boardScroll.setFillViewport(true); board = column(); board.setPadding(dp(16), dp(4), dp(16), dp(80)); boardScroll.addView(board); canvas.addView(boardScroll, new FrameLayout.LayoutParams(-1, -1));
+        pinGrid = new RecyclerView(this); pinGrid.setPadding(0, dp(4), 0, dp(80)); pinGrid.setClipToPadding(false); pinGrid.setHasFixedSize(true); pinGrid.setItemAnimator(null); pinGrid.setVisibility(View.GONE); canvas.addView(pinGrid, new FrameLayout.LayoutParams(-1, -1));
         pinGrid.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> { if (right - left != oldRight - oldLeft && pinGrid.getAdapter() != null) pinGrid.post(this::renderPins); });
         actions = row(); actions.setPadding(dp(16), dp(8), dp(16), dp(16));
         actionScroll = new HideViewOnScrollBehavior<LinearLayout>(HideViewOnScrollBehavior.EDGE_BOTTOM) {
             @Override public boolean onStartNestedScroll(CoordinatorLayout parent, LinearLayout child, View direct, View target, int axes, int type) { return !child.hasFocus() && super.onStartNestedScroll(parent, child, direct, target, axes, type); }
         };
-        CoordinatorLayout.LayoutParams actionParams = new CoordinatorLayout.LayoutParams(-1, -2); actionParams.gravity = Gravity.BOTTOM; actionParams.setBehavior(actionScroll); canvas.addView(actions, actionParams);
+        CoordinatorLayout.LayoutParams actionParams = new CoordinatorLayout.LayoutParams(-1, -2); actionParams.gravity = Gravity.BOTTOM; actionParams.setBehavior(actionScroll); screen.addView(actions, actionParams);
         locationButton = new ExtendedFloatingActionButton(this); locationButton.setTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodyLarge); locationButton.setSingleLine(true); locationButton.setEllipsize(android.text.TextUtils.TruncateAt.END); locationButton.setMinHeight(dp(48)); locationButton.setMinimumHeight(dp(48)); locationButton.setInsetTop(dp(4)); locationButton.setInsetBottom(dp(4)); locationButton.setPaddingRelative(dp(12), dp(8), dp(12), dp(8)); locationButton.setIconSize(dp(20)); locationButton.setIconPadding(dp(8)); locationButton.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.papan_primary_container))); locationButton.setTextColor(getColor(R.color.papan_on_primary_container)); locationButton.setIconTint(ColorStateList.valueOf(getColor(R.color.papan_on_primary_container))); locationButton.setOnClickListener(v -> chooseLocation()); actions.addView(locationButton, new LinearLayout.LayoutParams(-2, -2));
         View flexible = new View(this); actions.addView(flexible, new LinearLayout.LayoutParams(dp(12), 0, 1));
         addLink = new FloatingActionButton(this); addLink.setSize(FloatingActionButton.SIZE_MINI); addLink.setEnsureMinTouchTargetSize(true); addLink.setMaxImageSize(dp(20)); addLink.setImageResource(R.drawable.add); addLink.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); addLink.setImageTintList(ColorStateList.valueOf(getColor(R.color.papan_on_primary))); addLink.setContentDescription("Add link"); addLink.setOnClickListener(v -> enterLink()); actions.addView(addLink, new LinearLayout.LayoutParams(-2, -2));
-        View.OnFocusChangeListener revealActions = (view, focused) -> { if (focused) actionScroll.slideIn(actions, false); };
+        View.OnFocusChangeListener revealActions = (view, focused) -> { if (focused) revealChrome(); };
         locationButton.setOnFocusChangeListener(revealActions); addLink.setOnFocusChangeListener(revealActions);
+        root.getViewTreeObserver().addOnGlobalFocusChangeListener((before, focused) -> { if (toolbar.hasFocus() || searchLayout.hasFocus()) revealChrome(); });
+        AccessibilityManager.TouchExplorationStateChangeListener exploration = enabled -> { if (enabled) revealChrome(); }; accessibility.addTouchExplorationStateChangeListener(exploration);
+        appBar.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(View view) {}
+            @Override public void onViewDetachedFromWindow(View view) { accessibility.removeTouchExplorationStateChangeListener(exploration); }
+        });
         actions.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             int width = 0; for (String label : LOCATION_LABELS) width = Math.max(width, (int)Math.ceil(locationButton.getPaint().measureText(label)));
             width += locationButton.getPaddingStart() + locationButton.getPaddingEnd() + locationButton.getIconSize() + locationButton.getIconPadding();
@@ -315,8 +335,9 @@ public final class MainActivity extends AppCompatActivity {
         popup.getListView().setChoiceMode(selected < 0 ? android.widget.ListView.CHOICE_MODE_NONE : android.widget.ListView.CHOICE_MODE_SINGLE); if (selected >= 0) popup.getListView().setItemChecked(selected, true); popup.setSelection(Math.max(0, selected)); return popup;
     }
     private String collectionLabel(JSONObject value) { return value.optString("name") + (value.optBoolean("protected") ? " · protected" : ""); }
+    private void revealChrome() { actionScroll.slideIn(actions, false); appBar.setExpanded(true, false); }
     private void showDestination(int id) {
-        actionScroll.slideIn(actions, false);
+        revealChrome();
         remote = id == 2; activityOpen = id == 3; boardGeneration++; gridKey = ""; handler.removeCallbacks(browsePoll); handler.removeCallbacks(searchPoll); search.setText(""); updateChrome();
         if (activityOpen) { getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE); heading.setText("Desktop delivery activity"); renderActivity(); }
         else if (remote) loadDesktop(false, true); else refreshLocal();
@@ -332,6 +353,7 @@ public final class MainActivity extends AppCompatActivity {
         toolbar.getMenu().findItem(106).setVisible(remote);
     }
     private void toggleSearch() {
+        revealChrome();
         boolean show = !searchLayout.isShown(); searchLayout.setVisibility(show ? View.VISIBLE : View.GONE);
         if (show) search.requestFocus(); else { search.setText(""); search.clearFocus(); ((android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(search.getWindowToken(), 0); }
     }
@@ -404,7 +426,7 @@ public final class MainActivity extends AppCompatActivity {
             });
         });
     }
-    private void clearBoard() { actionScroll.slideIn(actions, false); pinGrid.removeCallbacks(resizeBoard); pinGrid.setVisibility(View.GONE); pinGrid.setAdapter(null); boardScroll.setVisibility(View.VISIBLE); board.removeAllViews(); }
+    private void clearBoard() { revealChrome(); pinGrid.removeCallbacks(resizeBoard); pinGrid.setVisibility(View.GONE); pinGrid.setAdapter(null); boardScroll.setVisibility(View.VISIBLE); board.removeAllViews(); }
     private void renderPins() {
         if (board == null || activityOpen) return;
         try {
@@ -424,7 +446,7 @@ public final class MainActivity extends AppCompatActivity {
             }
             if (pins.isEmpty()) { clearBoard(); board.addView(text(query.isEmpty() ? "This collection is empty." : "No matching pins.", 20)); board.addView(text(query.isEmpty() ? "Paste a link or share one to Papan to add your first reference." : "Try another title, source or note.", 16)); return; }
             String key = (remote ? "desktop:" + selectedRemote : "phone:" + selectedLocal) + ":" + query;
-            if (!key.equals(gridKey)) actionScroll.slideIn(actions, false);
+            if (!key.equals(gridKey)) revealChrome();
             GridLayoutManager previous = (GridLayoutManager)pinGrid.getLayoutManager(); int first = key.equals(gridKey) && previous != null ? previous.findFirstVisibleItemPosition() : -1;
             View anchor = first >= 0 ? previous.findViewByPosition(first) : null; int offset = anchor == null ? 0 : previous.getDecoratedTop(anchor) - pinGrid.getPaddingTop();
             // A second size event can arrive before the replacement layout has attached cards.
