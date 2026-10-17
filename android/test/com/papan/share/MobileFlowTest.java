@@ -56,6 +56,7 @@ public final class MobileFlowTest extends Instrumentation {
     @Override public void callActivityOnCreate(Activity activity, Bundle saved) { super.callActivityOnCreate(activity, saved); if (activity instanceof MainActivity) main = (MainActivity)activity; }
     @Override public void onCreate(Bundle args) { super.onCreate(args); arguments = args; start(); }
     @Override public void onStart() {
+        if ("true".equals(arguments.getString("mediaOnly"))) { mediaOnly(); return; }
         if ("true".equals(arguments.getString("scrollOnly"))) { scrollOnly(); return; }
         if ("true".equals(arguments.getString("locationOnly"))) { locationOnly(); return; }
         if ("true".equals(arguments.getString("viewerMenuOnly"))) { viewerMenuOnly(); return; }
@@ -76,12 +77,12 @@ public final class MobileFlowTest extends Instrumentation {
                 clipboard = (ClipboardManager)main.getSystemService(Context.CLIPBOARD_SERVICE); onMain(() -> previous = clipboard.getPrimaryClip());
                 click(main, "New collection"); input("Collection name", "Pocket"); click(main, "Create");
                 click(main, "New collection"); input("Collection name", "Study"); click(main, "Create");
-                clip(url); click(main, "Paste link"); click(main, "Phone · Pocket");
+                clip(url); click(main, "Paste link"); linkOnly(); click(main, "Phone · Pocket");
                 await(() -> MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 1 && "saved".equals(MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(0).optString("capture")), 15000, "Standalone phone image was not saved.");
                 await(() -> hasImage(main.getWindow().getDecorView()), 5000, "Phone board did not decode its saved image.");
-                clip(url); click(main, "Paste link"); click(main, "Phone · Pocket");
+                clip(url); click(main, "Paste link"); linkOnly(); click(main, "Phone · Pocket");
                 require(MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 1, "Repeated phone paste duplicated a pin.");
-                clip(url); click(main, "Paste link"); click(main, "Phone · Study");
+                clip(url); click(main, "Paste link"); linkOnly(); click(main, "Phone · Study");
                 await(() -> MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 2, 3000, "Same URL could not be saved in a different phone collection.");
                 JSONObject local = MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(1);
                 await(() -> "saved".equals(MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(1).optString("capture")), 15000, "Second phone preview was not saved.");
@@ -102,14 +103,14 @@ public final class MobileFlowTest extends Instrumentation {
                 require(MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 2 && MobileLibrary.get(main).snapshot().toString().contains("Saved without desktop"), "Phone library did not survive a storage reopen.");
                 require(PhoneStore.get(main).snapshot().getJSONArray("entries").length() == 0, "Local save entered desktop queue.");
             }
-            if (!cameraOnly) { clip("Keep this " + url); click(main, "Paste link"); }
-            else onMain(() -> main.onNewIntent(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "Keep this " + url)));
+            if (!cameraOnly) { clip("Keep this " + url); click(main, "Paste link"); linkOnly(); }
+            else { onMain(() -> main.onNewIntent(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "Keep this " + url))); linkOnly(); }
             await(() -> has("Queue for desktop after pairing"), 5000, "Destination picker did not offer deferred desktop delivery.");
             click(main, "Queue for desktop after pairing");
             await(() -> PhoneStore.get(main).snapshot().getJSONArray("entries").length() == 1, 3000, "Paste did not queue the clipboard URL: " + ((TextView)field(main, "status")).getText());
             require(url.equals(PhoneStore.get(main).snapshot().getJSONArray("entries").getJSONObject(0).getString("url")), "Wrong clipboard URL.");
-            if (!cameraOnly) click(main, "Paste link");
-            else onMain(() -> main.onNewIntent(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url)));
+            if (!cameraOnly) { click(main, "Paste link"); linkOnly(); }
+            else { onMain(() -> main.onNewIntent(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url))); linkOnly(); }
             await(() -> has("Queue for desktop after pairing"), 5000, "Repeated paste did not open destination picker."); click(main, "Queue for desktop after pairing");
             require(PhoneStore.get(main).snapshot().getJSONArray("entries").length() == 1, "Repeated paste duplicated the pending URL.");
             screenshot(main, "unpaired.png");
@@ -176,7 +177,70 @@ public final class MobileFlowTest extends Instrumentation {
         }
         finish("passed".equals(result.getString("status")) ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
     }
+    private void mediaOnly() {
+        Bundle result = new Bundle();
+        try {
+            require("com.papan.share.test".equals(getTargetContext().getPackageName()), "Only the disposable test package is allowed.");
+            createDisplay(720, 1440); result.putInt("displayId", displayId);
+            String collection = MobileLibrary.get(getTargetContext()).create("Selected media");
+            main = (MainActivity)startActivitySync(new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), ActivityOptions.makeBasic().setLaunchDisplayId(displayId).toBundle());
+            await(() -> main.hasWindowFocus() && !busy(), 10000, "Media board did not initialize on its private display.");
+            clipboard = (ClipboardManager)main.getSystemService(Context.CLIPBOARD_SERVICE); onMain(() -> previous = clipboard.getPrimaryClip());
+            String url = arguments.getString("mediaUrl");
+            onMain(() -> main.onNewIntent(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url.replace("/gallery", "/retry-gallery"))));
+            await(() -> has("Retry"), 90000, "Chooser did not report an unavailable source."); MediaChooser recovering = (MediaChooser)field(main, "mediaChooser"); click(main, "Retry");
+            await(() -> has("Video 1, not selected"), 90000, "Chooser retry did not recover."); require(field(main, "mediaChooser") == recovering, "Retry escaped the activity-owned chooser."); click(main, "Cancel");
+            clip(url); click(main, "Paste link");
+            await(() -> has("Video 1, not selected") && has("Image 2, not selected") && has("Image 3, not selected"), 90000, "Media chooser did not show extracted video and images.");
+            require(MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 0, "Inspection saved a pin before confirmation.");
+            MediaChooser chooser = (MediaChooser)field(main, "mediaChooser"); await(() -> mediaPreviewCount(chooser.getWindow().getDecorView()) == 3, 15000, "Chooser previews did not decode."); screenshot(main, chooser.getWindow(), "media-choice.png"); click(main, "Cancel");
+            require(MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 0, "Cancel saved a pin.");
+            click(main, "Paste link"); await(() -> has("Video 1, not selected"), 90000, "Second inspection failed.");
+            MediaChooser second = (MediaChooser)field(main, "mediaChooser"); await(() -> mediaPreviewCount(second.getWindow().getDecorView()) == 3, 15000, "Second chooser previews did not decode.");
+            click(main, "Video 1, not selected"); click(main, "Image 2, not selected"); screenshot(main, second.getWindow(), "media-selected.png"); click(main, "Choose collection (2)"); click(main, "Phone · Selected media");
+            await(() -> { org.json.JSONArray pins = MobileLibrary.get(main).snapshot().getJSONArray("pins"); return pins.length() == 1 && !"pending".equals(pins.getJSONObject(0).optString("capture")); }, 180000, "Selected downloads did not finish.");
+            JSONObject saved = MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(0);
+            require("saved".equals(saved.optString("capture")), "Selected capture failed: " + saved.optString("captureError"));
+            org.json.JSONArray items = saved.getJSONArray("items"); require(items.length() == 2 && "video".equals(items.getJSONObject(0).optString("kind")), "Selection order or unselected-media exclusion failed.");
+            File movie = MobileLibrary.get(main).mediaFile(items.getJSONObject(0).getString("mediaFile")); require(movie.isFile() && movie.length() > 100, "Downloaded video bytes are missing.");
+            android.media.MediaMetadataRetriever decoder = new android.media.MediaMetadataRetriever(); try { decoder.setDataSource(movie.toString()); Bitmap frame = decoder.getFrameAtTime(); require(frame != null && android.graphics.Color.red(frame.getPixel(0, 0)) > 180, "Saved media is a poster rather than the red video."); frame.recycle(); } finally { decoder.release(); }
+            MobileLibrary.get(main).retry(saved.getString("id")); File database = new File(main.getFilesDir(), "mobile-library.json"), blocked = new File(database + ".new"), marker = new File(blocked, "fixture"); byte[] prior = java.nio.file.Files.readAllBytes(database.toPath());
+            require(blocked.mkdir() && marker.createNewFile(), "Could not block selected-media commit."); boolean rejected = false;
+            try { LocalCapture.sync(main); } catch (Exception expected) { rejected = true; } finally { marker.delete(); blocked.delete(); }
+            require(rejected && java.util.Arrays.equals(prior, java.nio.file.Files.readAllBytes(database.toPath())) && movie.isFile() && new File(main.getFilesDir(), "mobile-media").list().length == 2, "Failed selected-media commit changed saved files or left staged media.");
+            new java.net.URL(url.replace("/gallery", "/offline")).openConnection().getInputStream().close();
+            await(() -> { View card = description(main.getWindow().getDecorView(), "Open pin: Selected media fixture"); if (card == null) return false; onMain(card::performClick); return true; }, 5000, "Saved card did not open.");
+            await(() -> viewerVideo() != null && viewerVideo().isPlaying(), 10000, "Saved video did not play offline."); PinViewer viewer = (PinViewer)field(main, "detailDialog"); fittedVideo(viewer); screenshot(main, viewer.getWindow(), "selected-video-offline.png");
+            swipeViewer(viewer, -220, 0); await(() -> viewerVideo() == null && hasImage(viewer.getWindow().getDecorView()), 5000, "Selected image attachment did not decode offline."); click(main, "Close reference");
+            MobileLibrary.get(main).retry(saved.getString("id")); LocalCapture.sync(main); JSONObject failed = MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(0);
+            require("failed".equals(failed.optString("capture")) && movie.isFile() && failed.getJSONArray("items").toString().equals(items.toString()), "Retry failure lost the saved selection.");
+            Field singleton = MobileLibrary.class.getDeclaredField("instance"); singleton.setAccessible(true); singleton.set(null, null); require(MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(0).getJSONArray("items").length() == 2, "Reopening storage lost its attachments.");
+            relaunch(600, 1400, 2); onMain(() -> main.onNewIntent(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url)));
+            await(() -> has("Video 1, not selected"), 90000, "Enlarged-text chooser did not load."); click(main, "Video 1, not selected");
+            MediaChooser large = (MediaChooser)field(main, "mediaChooser"); checkChooserActions(large); click(main, "Cancel");
+            String live = arguments.getString("liveUrl");
+            if (live != null) {
+                JSONObject social = new JSONObject();
+                try { JSONObject plan = (JSONObject)MediaExtractor.run(main, new JSONObject().put("action", "inspect").put("url", live), new java.util.concurrent.atomic.AtomicBoolean(false)); org.json.JSONArray keys = new org.json.JSONArray(); for (int i = 0; i < plan.getJSONArray("items").length(); i++) keys.put(plan.getJSONArray("items").getJSONObject(i).getString("key")); String id = MobileLibrary.get(main).addSelection(collection, live, plan, keys); LocalCapture.sync(main); for (int i = 0; i < MobileLibrary.get(main).snapshot().getJSONArray("pins").length(); i++) { JSONObject pin = MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(i); if (id.equals(pin.optString("id"))) {
+                        social.put("status", pin.optString("capture")).put("error", pin.optString("captureError")).put("engine", plan.optString("engine")).put("items", pin.getJSONArray("items").length());
+                        if ("saved".equals(pin.optString("capture"))) { File actual = MobileLibrary.get(main).mediaFile(pin.getJSONArray("items").getJSONObject(0).getString("mediaFile")); android.media.MediaMetadataRetriever probe = new android.media.MediaMetadataRetriever(); try { probe.setDataSource(actual.toString()); Bitmap frame = probe.getFrameAtTime(); social.put("frameDecoded", frame != null).put("bytes", actual.length()).put("width", probe.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)).put("height", probe.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)).put("durationMs", probe.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)); if (frame != null) frame.recycle(); } finally { probe.release(); } }
+                    } } }
+                catch (Exception error) { social.put("status", "unavailable").put("error", error.getMessage()); }
+                try (FileOutputStream file = new FileOutputStream(new File(main.getFilesDir(), "live-media.json"))) { file.write(social.toString(2).getBytes(java.nio.charset.StandardCharsets.UTF_8)); }
+            }
+            MobileLibrary.get(main).removeCollection(collection); require(!movie.exists(), "Deleting the collection left its attachment files.");
+            result.putString("status", "passed"); result.putString("checks", "Native paste, extracted video/image previews, highlighted selection, cancel without mutation, exact selected attachments/order, actual saved video bytes and red decoded frames, offline full-screen video and image swipes, failed retry retention, storage reopening and collection cleanup pass on a private display. No phone UI used.");
+        } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); }
+        finally { if (clipboard != null) onMain(() -> { if (previous != null) clipboard.setPrimaryClip(previous); }); onMain(() -> { if (main != null && !main.isDestroyed()) main.finishAndRemoveTask(); }); waitForIdleSync(); if (display != null) display.release(); if (output != null) output.close(); }
+        finish("passed".equals(result.getString("status")) ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
+    }
+    private void checkChooserActions(MediaChooser chooser) throws Exception {
+        View next = (View)field(chooser, "next"); onMain(() -> next.requestFocus());
+        await(() -> { android.graphics.Rect visible = new android.graphics.Rect(); return next.getGlobalVisibleRect(visible) && visible.height() == next.getHeight(); }, 5000, "Enlarged-text chooser actions cannot be scrolled into view.");
+        require(next.getHeight() >= 96 && chooser.getWindow().getDecorView().getDisplay().getDisplayId() == displayId, "Chooser lost its tap target or private display.");
+    }
     private void clip(String value) { clipboardFixture = value; onMain(() -> { require(!((KeyguardManager)getTargetContext().getSystemService(Context.KEYGUARD_SERVICE)).isDeviceLocked(), "Phone locked during clipboard testing."); clipboard.setPrimaryClip(ClipData.newPlainText("Papan test", value)); ClipData copy = clipboard.getPrimaryClip(); require(copy != null && value.contentEquals(copy.getItemAt(0).getText() == null ? "" : copy.getItemAt(0).getText()), "Test clipboard write/read did not match on this display."); }); }
+    private int mediaPreviewCount(View view) { int count = view instanceof ImageView && ((ImageView)view).getDrawable() instanceof android.graphics.drawable.BitmapDrawable ? 1 : 0; if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup)view).getChildCount(); i++) count += mediaPreviewCount(((ViewGroup)view).getChildAt(i)); return count; }
     private void scrollOnly() {
         Bundle result = new Bundle();
         try {
@@ -276,14 +340,16 @@ public final class MobileFlowTest extends Instrumentation {
             require("com.papan.share.test".equals(getTargetContext().getPackageName()), "Only the disposable test package is allowed.");
             createDisplay(720, 1440); result.putInt("displayId", displayId);
             main = (MainActivity)startActivitySync(new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), ActivityOptions.makeCustomAnimation(getTargetContext(), 0, 0).setLaunchDisplayId(displayId).toBundle());
-            await(() -> main.hasWindowFocus() && !busy(), 10000, "Virtual location board did not initialize."); locationMotion(); locationSizing();
+            await(() -> main.hasWindowFocus() && !busy(), 10000, "Virtual location board did not initialize."); if (!"true".equals(arguments.getString("labelsOnly"))) locationMotion(); locationSizing();
             relaunch(600, 1400, 1); locationSizing(); relaunch(1280, 1600, 1); locationSizing(); relaunch(720, 1600, 2); locationSizing();
             relaunch(720, 1440, 1); click(main, "Desktop");
             TextView wider = (TextView)field(main, "locationButton"); await(() -> !wider.isLayoutRequested() && wider.getLayout() != null && wider.getLayout().getText().length() == 7, 3000, "Desktop layout did not settle before the font change.");
             onMain(() -> { try { wider.setTextScaleX(1.3f); ((TextView)field(main, "collectionButton")).setTextScaleX(1.3f); } catch (Exception error) { throw new RuntimeException(error); } });
             await(() -> !wider.isLayoutRequested(), 3000, "Wider font did not finish layout.");
             onMain(() -> require(wider.getLayout().getLineCount() == 1 && wider.getLayout().getEllipsisCount(0) == 0, "Desktop is truncated after its font metrics change."));
-            locationSizing(); locationScrolling();
+            locationSizing();
+            relaunch(720, 1440, 1); onMain(() -> main.getTheme().applyStyle(R.style.PapanWideMenuTest, true)); locationSizing();
+            locationScrolling();
             result.putString("checks", "Composited virtual-display motion frames keep the current button uncovered while the menu reveals upward; native location selection, stable dimensions/typography and current-button dismissal pass at 300dp/360dp/640dp and 200% text. Settled native layouts show every location label on one line without ellipsis, including after text metrics become 30% wider; a short 210dp display scrolls the native menu to its second destination. Compact controls retain 48dp tap targets, 40dp normal-size faces, scalable labels and dynamic clearance; Add activates outside its visible face. No physical phone used."); result.putString("status", "passed");
         } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); }
         finally { onMain(() -> { if (main != null && !main.isDestroyed()) main.finishAndRemoveTask(); }); waitForIdleSync(); if (display != null) display.release(); if (output != null) output.close(); }
@@ -302,7 +368,7 @@ public final class MobileFlowTest extends Instrumentation {
                 onMain(() -> { try { PinViewer viewer = (PinViewer)field(main, "detailDialog"); require(viewer.isShowing() && viewer.getWindow().getDecorView().hasWindowFocus(), "Copy did not dismiss the native popup and return focus to the viewer."); } catch (Exception error) { throw new RuntimeException(error); } });
                 click(main, "Details"); await(() -> has("Pin details"), 3000, "Details sheet did not open after copying."); click(main, "Close");
             }
-            click(main, "Save to another collection"); await(() -> has("Save link"), 3000, "Save sheet did not open after closing the viewer."); click(main, "Cancel"); await(main::hasWindowFocus, 3000, "Save cancellation did not return to the board.");
+            click(main, "Save to another collection"); linkOnly(); await(() -> has("Save link"), 3000, "Save sheet did not open after closing the viewer."); click(main, "Cancel"); await(main::hasWindowFocus, 3000, "Save cancellation did not return to the board.");
             onMain(() -> description(main.getWindow().getDecorView(), "Open pin: Menu reference").performClick()); click(main, "Remove pin"); click(main, "Keep"); click(main, "Close reference"); result.putString("checks", "Three consecutive copy/details/close sequences wait for native popup removal and retain viewer focus; save-to-collection/cancel, remove cancellation and close work on a private display."); result.putString("status", "passed");
         } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); }
         finally { onMain(() -> { if (main != null && !main.isDestroyed()) main.finishAndRemoveTask(); }); waitForIdleSync(); if (display != null) display.release(); if (output != null) output.close(); }
@@ -313,10 +379,19 @@ public final class MobileFlowTest extends Instrumentation {
     }
     private void locationMotion() throws Exception {
         java.util.List<Bitmap> frames = java.util.Collections.synchronizedList(new java.util.ArrayList<>()); int[] button = new int[4];
+        boolean[] recording = {true}; double[] reveal = {Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY}; int[] revealSamples = {0};
+        android.view.Choreographer.FrameCallback sampler = new android.view.Choreographer.FrameCallback() { @Override public void doFrame(long time) {
+            if (!recording[0]) return;
+            for (View window : WindowInspector.getGlobalWindowViews()) if (window != main.getWindow().getDecorView() && window.hasWindowFocus() && window.getDisplay() != null && window.getDisplay().getDisplayId() == displayId && window instanceof ViewGroup && ((ViewGroup)window).getChildCount() > 0) {
+                View child = ((ViewGroup)window).getChildAt(0); int[] point = new int[2]; child.getLocationOnScreen(point); android.graphics.Rect clip = child.getClipBounds(); double top = point[1] + (clip == null ? 0 : clip.top);
+                reveal[0] = Math.max(reveal[0], top); reveal[1] = Math.min(reveal[1], top); revealSamples[0]++;
+            }
+            android.view.Choreographer.getInstance().postFrameCallback(this);
+        } };
         onMain(() -> { try { View anchor = (View)field(main, "locationButton"); int[] point = new int[2]; anchor.getLocationOnScreen(point); button[0] = point[0]; button[1] = point[1]; button[2] = point[0] + anchor.getWidth(); button[3] = point[1] + anchor.getHeight(); output.setOnImageAvailableListener(reader -> { try (Image frame = reader.acquireLatestImage()) { if (frame != null && frames.size() < 18) frames.add(displayFrame(frame)); } }, new Handler(Looper.getMainLooper())); main.getWindow().getDecorView().invalidate(); } catch (Exception error) { throw new RuntimeException(error); } });
         try {
             await(() -> !frames.isEmpty(), 5000, "Virtual display did not render a baseline frame."); Bitmap before = frames.get(frames.size() - 1); onMain(() -> { for (Bitmap frame : new java.util.ArrayList<>(frames)) if (frame != before) frame.recycle(); frames.clear(); });
-            onMain(() -> { try { ((View)field(main, "locationButton")).performClick(); } catch (Exception error) { throw new RuntimeException(error); } });
+            onMain(() -> { try { android.view.Choreographer.getInstance().postFrameCallback(sampler); ((View)field(main, "locationButton")).performClick(); } catch (Exception error) { throw new RuntimeException(error); } });
             await(() -> !main.hasWindowFocus(), 5000, "Location popup did not open."); popupFits("location-motion-menu.png");
             java.util.List<Bitmap> captured = new java.util.ArrayList<>(); onMain(() -> { output.setOnImageAvailableListener(reader -> { try (Image frame = reader.acquireLatestImage()) {} }, new Handler(Looper.getMainLooper())); captured.addAll(frames); });
             require(captured.size() >= 2, "Menu had no observable native animation frames."); int first = -1, last = -1, firstTop = Integer.MAX_VALUE, lastTop = Integer.MAX_VALUE;
@@ -327,15 +402,16 @@ public final class MobileFlowTest extends Instrumentation {
                 for (int y = 0; y < button[1] - 4; y += 2) for (int x = Math.max(0, button[0] - 16); x < Math.min(frame.getWidth(), button[2] + 16); x += 2) if (colorDifference(before.getPixel(x, y), frame.getPixel(x, y)) > 24) { top = Math.min(top, y); changed++; }
                 if (changed > 12) { if (first < 0) { first = n; firstTop = top; } last = n; lastTop = top; }
             }
-            require(first >= 0 && last > first && firstTop > lastTop + 16, "Menu did not visibly emerge upward from behind its button: " + firstTop + " -> " + lastTop);
+            require(first >= 0 && last > first && revealSamples[0] >= 2 && reveal[0] > reveal[1] + 16 && reveal[1] < button[1], "Menu did not reveal upward: native=" + reveal[0] + " -> " + reveal[1] + " samples=" + revealSamples[0] + " pixels=" + firstTop + " -> " + lastTop);
             androidx.appcompat.widget.ListPopupWindow menu = (androidx.appcompat.widget.ListPopupWindow)field(main, "locationMenu"); android.widget.PopupWindow nativePopup = (android.widget.PopupWindow)field(menu, "mPopup");
-            JSONObject proof = new JSONObject().put("status", "passed").put("displayId", displayId).put("frames", captured.size()).put("firstVisibleTop", firstTop).put("finalVisibleTop", lastTop).put("buttonUncovered", true).put("nativeTransition", nativePopup.getEnterTransition() == null ? "none" : nativePopup.getEnterTransition().getClass().getName());
+            JSONObject proof = new JSONObject().put("status", "passed").put("displayId", displayId).put("frames", captured.size()).put("firstVisibleTop", firstTop).put("finalVisibleTop", lastTop).put("nativeRevealTop", reveal[0]).put("nativeFinalTop", reveal[1]).put("nativeRevealSamples", revealSamples[0]).put("buttonUncovered", true).put("nativeTransition", nativePopup.getEnterTransition() == null ? "none" : nativePopup.getEnterTransition().getClass().getName());
             try (FileOutputStream file = new FileOutputStream(new File(main.getFilesDir(), "menu-motion.json"))) { file.write(proof.toString(2).getBytes(java.nio.charset.StandardCharsets.UTF_8)); }
             for (String name : new String[] {"before", "first", "last"}) { Bitmap frame = name.equals("before") ? before : captured.get(name.equals("first") ? first : last); try (FileOutputStream file = new FileOutputStream(new File(main.getFilesDir(), "menu-motion-" + name + ".png"))) { frame.compress(Bitmap.CompressFormat.PNG, 100, file); } }
             before.recycle(); for (Bitmap frame : captured) frame.recycle(); tapLocationButton(); await(main::hasWindowFocus, 5000, "Current location button did not dismiss the revealed menu.");
-        } finally { onMain(() -> output.setOnImageAvailableListener(reader -> { try (Image frame = reader.acquireLatestImage()) {} }, new Handler(Looper.getMainLooper()))); for (Bitmap frame : new java.util.ArrayList<>(frames)) if (!frame.isRecycled()) frame.recycle(); }
+        } finally { onMain(() -> { recording[0] = false; android.view.Choreographer.getInstance().removeFrameCallback(sampler); output.setOnImageAvailableListener(reader -> { try (Image frame = reader.acquireLatestImage()) {} }, new Handler(Looper.getMainLooper())); }); for (Bitmap frame : new java.util.ArrayList<>(frames)) if (!frame.isRecycled()) frame.recycle(); }
     }
     private int colorDifference(int a, int b) { return Math.max(Math.max(Math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)), Math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b))), Math.abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b))); }
+    private void linkOnly() { click(main, "Save link only / send to desktop"); }
     private void click(Activity activity, String label) {
         require(activity.getDisplay().getDisplayId() == displayId, "Refusing interaction outside the test display.");
         if (activity == main && (label.equals("Phone") || label.equals("Desktop") || label.equals("Activity"))) try {
@@ -379,7 +455,7 @@ public final class MobileFlowTest extends Instrumentation {
     private boolean hasImage(View root) { if (root instanceof ImageView && root.getTag() instanceof TextView && ((ImageView)root).getDrawable() instanceof android.graphics.drawable.BitmapDrawable) return true; if (root instanceof ViewGroup) for (int i = 0; i < ((ViewGroup)root).getChildCount(); i++) if (hasImage(((ViewGroup)root).getChildAt(i))) return true; return false; }
     private Bitmap imageBitmap(View root) { if (root instanceof ImageView && root.getTag() instanceof TextView && ((ImageView)root).getDrawable() instanceof android.graphics.drawable.BitmapDrawable) return ((android.graphics.drawable.BitmapDrawable)((ImageView)root).getDrawable()).getBitmap(); if (root instanceof ViewGroup) for (int i = 0; i < ((ViewGroup)root).getChildCount(); i++) { Bitmap bitmap = imageBitmap(((ViewGroup)root).getChildAt(i)); if (bitmap != null) return bitmap; } return null; }
     private void localVideo(String imageUrl) throws Exception {
-        String url = arguments.getString("videoPageUrl"); clip(url); click(main, "Paste link"); click(main, "Phone · Pocket");
+        String url = arguments.getString("videoPageUrl"); clip(url); click(main, "Paste link"); linkOnly(); click(main, "Phone · Pocket");
         await(() -> MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 3 && "saved".equals(MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(2).optString("capture")), 15000, "Webpage video was not captured on phone.");
         JSONObject pin = MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(2); File media = MobileLibrary.get(main).mediaFile(pin.getString("mediaFile")); require(media.isFile() && "video".equals(pin.optString("kind")), "Page saved a poster instead of local video bytes."); control("disable-phone-video");
         await(() -> has("Open pin: Saved phone video"), 5000, "Captured video did not appear on the phone board.");
@@ -443,7 +519,7 @@ public final class MobileFlowTest extends Instrumentation {
             click(main, "Close"); await(() -> main.hasWindowFocus(), 5000, "Closing Connections did not restore the board.");
             click(main, "Add link"); input("https://…", "https://example.com/keep-this-draft");
             onMain(() -> main.onNewIntent(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "invalid shared link")));
-            require(has("Choose collection"), "Incoming invalid share closed the existing form.");
+            require(has("Choose media"), "Incoming invalid share closed the existing form.");
             onMain(() -> { View background = main.getWindow().getDecorView().findViewById(com.google.android.material.R.id.snackbar_text); require(background == null || !background.isShown(), "Incoming share feedback appeared behind the form."); });
             click(main, "Cancel");
             await(() -> has(((TextView)field(main, "status")).getText().toString()), 3000, "Deferred share error was lost when the form closed.");
@@ -491,24 +567,24 @@ public final class MobileFlowTest extends Instrumentation {
         input("Collection name", "Pocket draft"); click(main, "Save");
         await(() -> has("Pocket draft"), 5000, "Collection rename did not update the tab.");
         click(main, "Rename collection"); input("Collection name", "Pocket"); click(main, "Save");
-        click(main, "Add link"); input("https://…", "not a link"); click(main, "Choose collection");
+        click(main, "Add link"); input("https://…", "not a link"); click(main, "Choose media");
         require(fieldError("https://…"), "Invalid link was accepted.");
-        input("https://…", url); click(main, "Choose collection"); click(main, "Cancel");
+        input("https://…", url); click(main, "Choose media"); click(main, "Cancel");
         require(MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 2 && PhoneStore.get(main).snapshot().getJSONArray("entries").length() == 0, "Cancelled sheet changed storage.");
         onMain(() -> main.onNewIntent(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url)));
-        click(main, "Phone · Study"); require(MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 2, "Share intent did not retain per-collection deduplication.");
+        linkOnly(); click(main, "Phone · Study"); require(MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 2, "Share intent did not retain per-collection deduplication.");
         click(main, "Pocket");
         onMain(() -> { View card = description(main.getWindow().getDecorView(), "Open pin: " + url); require(card != null, "Phone reference missing."); card.performClick(); });
         android.content.IntentFilter links = new android.content.IntentFilter(Intent.ACTION_VIEW); links.addDataScheme("http"); links.addDataScheme("https");
         ActivityMonitor source = addMonitor(links, new ActivityResult(Activity.RESULT_CANCELED, null), true);
         try { click(main, "Open original"); require(source.getHits() == 1, "Source did not route to a browser intent."); } finally { removeMonitor(source); }
-        click(main, "Save to another collection"); click(main, "Phone · Study");
+        click(main, "Save to another collection"); linkOnly(); click(main, "Phone · Study");
         require(MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 2, "Saving to an existing destination duplicated the reference.");
         click(main, "New collection"); input("Collection name", "Temporary check"); click(main, "Create");
         click(main, "Delete collection"); click(main, "Keep");
         require(MobileLibrary.get(main).snapshot().getJSONArray("collections").length() == 3, "Delete cancellation removed the collection.");
         String failedUrl = url.replace("/wide.png", "/missing");
-        clip(failedUrl); click(main, "Paste link"); click(main, "Phone · Temporary check");
+        clip(failedUrl); click(main, "Paste link"); linkOnly(); click(main, "Phone · Temporary check");
         await(() -> MobileLibrary.get(main).snapshot().getJSONArray("pins").length() == 3 && "failed".equals(MobileLibrary.get(main).snapshot().getJSONArray("pins").getJSONObject(2).optString("capture")), 10000, "Failed capture did not retain its link.");
         await(() -> has("Open pin: " + failedUrl) && text(main).contains("Preview unavailable"), 5000, "Failed preview did not expose its status and link."); alignedBoard(); screenshot(main, "failed-board.png");
         onMain(() -> { View card = description(main.getWindow().getDecorView(), "Open pin: " + failedUrl); require(card != null, "Failed reference missing."); card.performClick(); });
@@ -527,8 +603,8 @@ public final class MobileFlowTest extends Instrumentation {
         key(android.view.KeyEvent.KEYCODE_TAB);
         onMain(() -> { try { View fab = (View)field(main, "addLink"); fab.requestFocus(); require(fab.isFocused(), "Material Add link could not receive keyboard focus."); } catch (Exception error) { throw new RuntimeException(error); } });
         key(android.view.KeyEvent.KEYCODE_ENTER);
-        await(() -> has("Choose collection"), 5000, "Keyboard Enter did not activate Add link."); key(android.view.KeyEvent.KEYCODE_BACK);
-        await(() -> main.hasWindowFocus() && !has("Choose collection"), 5000, "Android Back did not dismiss the form.");
+        await(() -> has("Choose media"), 5000, "Keyboard Enter did not activate Add link."); key(android.view.KeyEvent.KEYCODE_BACK);
+        await(() -> main.hasWindowFocus() && !has("Choose media"), 5000, "Android Back did not dismiss the form.");
     }
     private void key(int code) throws Exception {
         require(displayId != Display.DEFAULT_DISPLAY && display.getDisplay().getDisplayId() == displayId, "Refusing keyboard input outside the isolated display.");
@@ -744,7 +820,7 @@ public final class MobileFlowTest extends Instrumentation {
             await(() -> !main.hasWindowFocus(), 5000, "Location button did not open."); popupFits("location-" + label.toLowerCase(java.util.Locale.ROOT) + "-menu.png"); require(!has(label), "Active location is repeated in the menu.");
             androidx.appcompat.widget.ListPopupWindow menu = (androidx.appcompat.widget.ListPopupWindow)field(main, "locationMenu"); android.widget.ListView rows = menu.getListView();
             if (menuWidth < 0) { menuWidth = rows.getWidth(); menuHeight = rows.getHeight(); } else require(rows.getWidth() == menuWidth && rows.getHeight() == menuHeight, "Location menus change dimensions across windows.");
-            onMain(() -> { for (int i = 0; i < rows.getChildCount(); i++) { TextView row = (TextView)rows.getChildAt(i); require(row.getTextSize() == button.getTextSize() && row.getTypeface().equals(button.getTypeface()), "Menu and button labels use inconsistent typography."); require(row.getLayout().getLineCount() == 1 && row.getLayout().getEllipsisCount(0) == 0, "Location menu label wraps or clips."); } });
+            onMain(() -> { for (int i = 0; i < rows.getChildCount(); i++) { TextView row = (TextView)rows.getChildAt(i); require(row.getTextSize() == button.getTextSize() && row.getTypeface().equals(button.getTypeface()), "Menu and button labels use inconsistent typography."); require(row.getLayout().getLineCount() == 1 && row.getLayout().getEllipsisCount(0) == 0, "Location menu label wraps or clips: " + row.getText() + " row=" + row.getWidth() + " text=" + android.text.Layout.getDesiredWidth(row.getText(), row.getPaint()) + " compound=" + row.getCompoundPaddingLeft() + "/" + row.getCompoundPaddingRight() + " list=" + rows.getWidth() + " listPadding=" + rows.getListPaddingLeft() + "/" + rows.getListPaddingRight() + " popup=" + menu.getWidth() + " scale=" + row.getTextScaleX()); } });
             tapLocationButton(); await(main::hasWindowFocus, 5000, "Current button could not dismiss the menu."); require(label.contentEquals(button.getText()), "Current button changed the active window.");
         }
     }
@@ -758,14 +834,14 @@ public final class MobileFlowTest extends Instrumentation {
         click(main, "Activity"); await(main::hasWindowFocus, 3000, "Scrolled location was not selectable.");
         require("Activity".contentEquals(((TextView)field(main, "locationButton")).getText()), "Scrolled menu changed the wrong location.");
     }
-    private boolean menuSettled(View view) { if (!view.isShown()) return true; if (view.getAlpha() < .999f || Math.abs(view.getTranslationX()) > .5f || Math.abs(view.getTranslationY()) > .5f || Math.abs(view.getScaleX() - 1) > .001f || Math.abs(view.getScaleY() - 1) > .001f || view.getAnimation() != null && !view.getAnimation().hasEnded()) return false; if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup)view).getChildCount(); i++) if (!menuSettled(((ViewGroup)view).getChildAt(i))) return false; return true; }
+    private boolean menuSettled(View view) { if (!view.isShown()) return true; android.graphics.Rect clip = view.getClipBounds(); if (view.getAlpha() < .999f || view.getTransitionAlpha() < .999f || clip != null && (clip.left != 0 || clip.top != 0 || clip.right != view.getWidth() || clip.bottom != view.getHeight()) || Math.abs(view.getTranslationX()) > .5f || Math.abs(view.getTranslationY()) > .5f || Math.abs(view.getScaleX() - 1) > .001f || Math.abs(view.getScaleY() - 1) > .001f || view.getAnimation() != null && !view.getAnimation().hasEnded()) return false; if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup)view).getChildCount(); i++) if (!menuSettled(((ViewGroup)view).getChildAt(i))) return false; return true; }
     private android.widget.ListView pickerList(View view) { if (view instanceof android.widget.ListView) return (android.widget.ListView)view; if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup)view).getChildCount(); i++) { android.widget.ListView found = pickerList(((ViewGroup)view).getChildAt(i)); if (found != null) return found; } return null; }
     private boolean containsCheckbox(View view) { if (view instanceof android.widget.CompoundButton) return true; if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup)view).getChildCount(); i++) if (containsCheckbox(((ViewGroup)view).getChildAt(i))) return true; return false; }
     private void control(String action) throws Exception { Delivery.request(arguments.getString("controlEndpoint"), "/" + action, "", new JSONObject()); }
     private boolean protectedAuthorized(DesktopLibrary client) throws Exception { org.json.JSONArray values = client.collections(); for (int i = 0; i < values.length(); i++) { JSONObject value = values.getJSONObject(i); if ("Protected test".equals(value.optString("name"))) return !value.optBoolean("locked"); } return false; }
     private void remoteBoards(String url) throws Exception {
         click(main, "Desktop"); await(() -> collectionAvailable("Android chosen"), 10000, "Open desktop collections did not load.");
-        clip(url + "?chosen"); click(main, "Paste link"); await(() -> has("Desktop · Android chosen"), 10000, "Desktop destination picker did not load.");
+        clip(url + "?chosen"); click(main, "Paste link"); linkOnly(); await(() -> has("Desktop · Android chosen"), 10000, "Desktop destination picker did not load.");
         control("disable"); click(main, "Desktop · Android chosen");
         await(() -> PhoneStore.get(main).snapshot().getJSONArray("entries").length() == 1 && !busy(), 15000, "Offline desktop choice was not retained.");
         JSONObject pending = PhoneStore.get(main).snapshot().getJSONArray("entries").getJSONObject(0); require(pending.has("collectionId") && "Android chosen".equals(pending.optString("collectionName")), "Selected collection was lost.");
@@ -810,7 +886,7 @@ public final class MobileFlowTest extends Instrumentation {
         org.json.JSONArray reordered = (org.json.JSONArray)field(main, "remotePins"); require(reordered.length() == 85, "Rearrangement discarded previously loaded pages."); for (int i = 1; i < 85; i++) require(("Fixture reference " + (i - 1)).equals(reordered.getJSONObject(i).optString("title")), "Rearrangement changed pagination order.");
         input("Search this collection", ""); input("Search this collection", "Fixture reference 83"); await(() -> ((org.json.JSONArray)field(main, "remotePins")).length() == 1 && "Fixture reference 83".equals(((org.json.JSONArray)field(main, "remotePins")).getJSONObject(0).optString("title")), 10000, "Search could not find a reference outside loaded pages."); input("Search this collection", "");
         click(main, "Protected test · protected"); await(() -> has("Unlock"), 5000, "Protected collection did not prompt."); click(main, "Cancel"); require(!text(main).contains("Protected reference"), "Cancel revealed protected content.");
-        clip(url + "?protected"); click(main, "Paste link"); click(main, "Desktop · Protected test · protected"); input("Collection password", "wrong"); click(main, "Unlock");
+        clip(url + "?protected"); click(main, "Paste link"); linkOnly(); click(main, "Desktop · Protected test · protected"); input("Collection password", "wrong"); click(main, "Unlock");
         await(() -> passwordError(), 10000, "Wrong password was not rejected."); input("Collection password", "mobile-test-password"); click(main, "Unlock");
         try { await(() -> PhoneStore.get(main).snapshot().getJSONArray("entries").length() == 0 && text(main).contains("Protected reference") && ((org.json.JSONArray)field(main, "remotePins")).length() == 2, 20000, "Correct password did not save into and open the protected board."); }
         catch (AssertionError failure) { DesktopLibrary boardAccess = (DesktopLibrary)field(main, "desktop"); throw new AssertionError(failure.getMessage() + " App session matches delivery: " + boardAccess.sessionId().equals(DesktopConnection.sessionId()) + "; board authorization: " + protectedAuthorized(boardAccess) + "; delivery authorization: " + protectedAuthorized(new DesktopLibrary(main))); }

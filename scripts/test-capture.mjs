@@ -16,6 +16,6 @@ const directory = await mkdtemp(path.join(os.tmpdir(), 'papan-capture-test-'));
 try {
   run(java('javac'), ['-encoding', 'UTF-8', '-source', '8', '-target', '8', '-classpath', platform, '-d', directory,
     ...['SharedLink.java', 'LocalCapture.java', 'MobileLibrary.java'].map(name => path.join(root, 'android/src/com/papan/share', name)),
-    path.join(root, 'test/com/papan/share/LocalCaptureTest.java')]);
+    path.join(root, 'test/com/papan/share/MediaExtractor.java'), path.join(root, 'test/com/papan/share/LocalCaptureTest.java')]);
   run(java('java'), ['-classpath', [directory, platform].join(path.delimiter), 'com.papan.share.LocalCaptureTest']);
 } finally { await rm(directory, { recursive: true, force: true }); }
