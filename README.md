@@ -4,7 +4,7 @@ Keep reference collections on your phone, or browse and add to open collections 
 
 The location button highlights the current window in green and lists only the other two locations when opened. It stays tappable, and its size stays steady when switching. Picker labels share the same scalable type size. Collection dropdowns highlight the selected row; neither dropdown uses selection checkboxes.
 
-Install [Android 0.3.0](https://github.com/chelij/papan-android/releases/tag/v0.3.0) for these mobile-board features. Desktop browsing, nearby approval, session access and preview metadata require [Papan desktop 0.3.3 or newer](https://github.com/chelij/papan/releases/tag/v0.3.3).
+Install [Android 0.3.1](https://github.com/chelij/papan-android/releases/tag/v0.3.1) for these mobile-board features and capture/storage reliability fixes. [Changelog and previous-release diff](CHANGELOG.md). Desktop browsing, nearby approval, session access and preview metadata require [Papan desktop 0.3.3 or newer](https://github.com/chelij/papan/releases/tag/v0.3.3).
 
 [Download the published APK](https://github.com/chelij/papan-android/releases/latest) · [Desktop downloads](https://github.com/chelij/papan/releases/latest) · [Local sharing protocol and troubleshooting](https://github.com/chelij/papan/blob/main/docs/mobile-sharing.md) · [Ecosystem and compatibility](https://github.com/chelij/papan/blob/main/docs/ecosystem.md)
 
