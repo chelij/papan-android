@@ -465,10 +465,10 @@ public final class MainActivity extends AppCompatActivity {
     private void stopBoardVideos() { if (pinGrid != null) for (int i = 0; i < pinGrid.getChildCount(); i++) { RecyclerView.ViewHolder holder = pinGrid.getChildViewHolder(pinGrid.getChildAt(i)); if (holder instanceof CardHolder && ((CardHolder)holder).video != null) ((CardHolder)holder).video.setActive(false); } }
     private void syncBoardVideos() {
         if (pinGrid == null) return;
-        android.graphics.Rect viewport = new android.graphics.Rect(); boolean play = foreground && !remote && !activityOpen && detailDialog == null && hasWindowFocus() && pinGrid.isShown() && pinGrid.getGlobalVisibleRect(viewport);
+        android.graphics.Rect viewport = new android.graphics.Rect(); boolean play = foreground && !activityOpen && detailDialog == null && hasWindowFocus() && pinGrid.isShown() && pinGrid.getGlobalVisibleRect(viewport);
         for (int i = 0; i < pinGrid.getChildCount(); i++) {
             RecyclerView.ViewHolder holder = pinGrid.getChildViewHolder(pinGrid.getChildAt(i)); if (!(holder instanceof CardHolder)) continue;
-            LocalVideoPreview video = ((CardHolder)holder).video; if (video == null) continue;
+            VideoPreview video = ((CardHolder)holder).video; if (video == null) continue;
             android.graphics.Rect bounds = new android.graphics.Rect(); video.setActive(play && video.getGlobalVisibleRect(bounds) && android.graphics.Rect.intersects(viewport, bounds));
         }
     }
@@ -526,7 +526,11 @@ public final class MainActivity extends AppCompatActivity {
                 JSONObject item = cover(pin, fromDesktop);
                 if (item != null && ("image".equals(item.optString("kind")) || !fromDesktop && "video".equals(item.optString("kind")) || fromDesktop && item.has("thumbnailUrl"))) preview.addView(imageFrame(pin, item, fromDesktop, fillFrames()), new FrameLayout.LayoutParams(-1, -1));
                 else if (notice == null) { String excerpt = item == null ? pin.optString("notes") : item.optString("text"); TextView kind = text(excerpt.isEmpty() ? item != null && "video".equals(item.optString("kind")) ? "Video" : "Saved link" : excerpt, 16); kind.setTextColor(MUTED); kind.setPadding(dp(12), dp(10), dp(12), 0); kind.setEllipsize(android.text.TextUtils.TruncateAt.END); kind.setMaxLines(1); preview.addView(kind, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP)); }
-                if (!fromDesktop && item != null && "video".equals(item.optString("kind"))) { File file = MobileLibrary.get(MainActivity.this).mediaFile(item.optString("mediaFile", pin.optString("mediaFile"))); if (file != null && file.isFile()) { card.video = new LocalVideoPreview(MainActivity.this, file, fillFrames()); preview.addView(card.video, new FrameLayout.LayoutParams(-1, -1)); } }
+                if (item != null && "video".equals(item.optString("kind"))) {
+                    if (fromDesktop) { String url = item.optString("previewUrl", item.optString("originalUrl")); if (!url.isEmpty()) card.video = new VideoPreview(MainActivity.this, desktop, url, fillFrames()); }
+                    else { File file = MobileLibrary.get(MainActivity.this).mediaFile(item.optString("mediaFile", pin.optString("mediaFile"))); if (file != null && file.isFile()) card.video = new VideoPreview(MainActivity.this, file, fillFrames()); }
+                    if (card.video != null) preview.addView(card.video, new FrameLayout.LayoutParams(-1, -1));
+                }
             } catch (Exception error) { TextView failed = text("Preview unavailable", 14); failed.setPadding(dp(12), dp(10), dp(12), 0); preview.addView(failed); }
             LinearLayout overlay = new LinearLayout(MainActivity.this) { @Override protected void onMeasure(int width, int height) { super.onMeasure(width, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)); } }, caption = column(); overlay.setOrientation(LinearLayout.VERTICAL);
             overlay.setBackground(new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, new int[] {Color.TRANSPARENT, 0x8C000000, 0xA6000000}));
@@ -546,7 +550,7 @@ public final class MainActivity extends AppCompatActivity {
     }
     private static final class CardHolder extends RecyclerView.ViewHolder {
         final LinearLayout body;
-        LocalVideoPreview video;
+        VideoPreview video;
         CardHolder(MaterialCardView card, LinearLayout content) { super(card); body = content; }
     }
     private FrameLayout imageFrame(JSONObject pin, JSONObject item, boolean fromDesktop, boolean crop) {
