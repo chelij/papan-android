@@ -24,7 +24,7 @@ try {
   const log = run('shell', 'am', 'instrument', '-w', '-r', '-e', 'locationOnly', 'true', `${pkg}/com.papan.share.MobileFlowTest`);
   await writeFile(path.join(out, 'instrumentation.txt'), log);
   assert.match(log, /INSTRUMENTATION_RESULT: status=passed/, log);
-  for (const name of ['menu-motion-before.png', 'menu-motion-first.png', 'menu-motion-last.png', 'menu-motion.json', 'location-phone-menu.png', 'location-desktop-menu.png', 'location-activity-menu.png']) {
+  for (const name of ['menu-motion-before.png', 'menu-motion-first.png', 'menu-motion-last.png', 'menu-motion.json', 'location-phone-menu.png', 'location-desktop-menu.png', 'location-activity-menu.png', 'location-desktop-button.png']) {
     const result = spawnSync(adb, ['-s', serial, 'exec-out', 'run-as', pkg, 'cat', `files/${name}`], { timeout: 10000, maxBuffer: 16 * 1024 * 1024 });
     assert.equal(result.status, 0, String(result.stderr));
     if (name.endsWith('.png')) assert.equal(result.stdout.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
