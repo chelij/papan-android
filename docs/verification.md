@@ -437,4 +437,16 @@ Exact commands, before/after logs, hashes, native reports, CI and installation e
 
 ## v0.3.1 release
 
-Candidate Android 0.3.1/code 5 packages the five runtime fixes checked in the integration and pass-5 sections above. Production Java/resources are unchanged from `14b167f`; only version metadata changes. Release checks build signed normal/test variants, verify embedded source and certificate, and run URL/HTTP/native storage and Android 16/API 36 workflow checks. Final candidate, CI, signed/public APK hashes and installation identity will be recorded after publication. Tracking: [Android #6](https://github.com/chelij/papan-android/issues/6), [coordinator #10](https://github.com/chelij/papan/issues/10). Local evidence: desktop `artifacts/release-v0.3.4/`.
+Published [Android v0.3.1/code 5](https://github.com/chelij/papan-android/releases/tag/v0.3.1) on 17 October 2026 from `a72a0b31bfed17244aded655d2d8fa41478c6b2e`. It packages the five capture/link/storage fixes above. Production Java/resources match `14b167f`; version metadata increases to 0.3.1/code 5. [Main CI](https://github.com/chelij/papan-android/actions/runs/39007059560) passes URL/HTTP checks and both disposable-key builds with JDK 17. Local JDK 21 maintainer-signed normal/test variants, 13 URL tests, nine HTTP cases and eight native storage scenarios pass.
+
+The exact isolated APK passes the full Android 16/API 36 x86_64 workflow on owned headless `emulator-5570`, verified virtual display **2**, including local/remote media, private persistence, protected sessions, nearby/recovery/QR fixtures, offline selected-destination delivery, responsive/keyboard checks, synchronized scrolling and **three actual receiver saves**. All **44** common compiled application classes match the normal release variant. Each APK's **47** embedded source files match the tag. Both signatures verify with the existing certificate, SHA-256 `427cd50690d9a1f00bf0df21e4305d81ec347400d42fba3d1fde7f7e61ba1bec`.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Normal/public `Papan-Android-0.3.1.apk` | `f31c8bf82a31c2831bd9fe10d8472974afd5c26fb97a0dddb32d48cbb296a144` |
+| Isolated `Papan-Android-0.3.1-test.apk` (not distributed) | `45961dc16e94d5017f2914729d78cacd546f3ca87eaf9f6f17447a3e7e15fe12` |
+| `papan-android-v0.3.0-to-v0.3.1.diff` | `3e70cfb266f3f27ce8df27eaaaa46a5d12849937e1a79086f235cb94da306a92` |
+
+All four public assets are verified: the downloaded normal APK and full diff match their SHA-256 sidecars and GitHub upload digests, including the checksum-file digests. Public APK bytes equal the checked normal build; its source/certificate/version verify again. The diff equals `git diff --binary v0.3.0..v0.3.1`. The disposable emulator/profile is removed, the original AVD configuration is unchanged and the desktop X connection is verified.
+
+The user explicitly deferred phone installation until reconnecting it. No physical-phone access, app launch or UI test occurred during this release. Existing phone/private-library/queue and receiver-v1 compatibility remains; optical QR/Wi-Fi, physical performance, Android 8/iOS, screen-reader and existing API 37 UI limits are unchanged. Tracking: [Android #6](https://github.com/chelij/papan-android/issues/6), [coordinator #10](https://github.com/chelij/papan/issues/10). Evidence: desktop `artifacts/release-v0.3.4/`, including `android-source.json`, `android-common-classes.json`, `android-storage.log`, `android-ui/report.json`, `emulator-cleanup.json` and `public/papan-android/check.json`.
