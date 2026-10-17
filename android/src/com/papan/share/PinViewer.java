@@ -70,7 +70,7 @@ final class PinViewer extends Dialog {
         try { String host = new java.net.URI(pin.optString("sourceUrl")).getHost(); if (host != null) toolbar.setSubtitle(host.replaceFirst("^www\\.", "")); } catch (Exception ignored) {}
         toolbar.setNavigationIcon(R.drawable.close); toolbar.setNavigationIconTint(getContext().getColor(R.color.papan_on_surface)); toolbar.setNavigationContentDescription("Close reference"); toolbar.setNavigationOnClickListener(v -> dismiss());
         actions.populate(toolbar.getMenu());
-        toolbar.setOnMenuItemClickListener(item -> { pause(); actions.select(item.getItemId()); return true; }); root.addView(toolbar, new LinearLayout.LayoutParams(-1, -2));
+        toolbar.setOnMenuItemClickListener(item -> { pause(); int id = item.getItemId(); toolbar.dismissPopupMenus(); handler.post(() -> { if (isShowing()) actions.select(id); }); return true; }); root.addView(toolbar, new LinearLayout.LayoutParams(-1, -2));
         stage = new FrameLayout(getContext()); stage.setContentDescription("Reference media. Swipe up or down for other pins; swipe sideways for this pin's attachments."); root.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1)); stage.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob) -> fitVideo());
         stage.setFocusable(true); stage.setAccessibilityDelegate(new View.AccessibilityDelegate() {
             @Override public void onInitializeAccessibilityNodeInfo(View host, android.view.accessibility.AccessibilityNodeInfo info) {
@@ -166,5 +166,5 @@ final class PinViewer extends Dialog {
     int position() { return video != null && prepared ? video.getCurrentPosition() : position; }
     boolean playing() { return video != null && prepared ? video.isPlaying() : playing; }
     private void stopVideo() { handler.removeCallbacks(tick); if (video != null) video.stopPlayback(); video = null; prepared = false; }
-    @Override public void dismiss() { stopVideo(); super.dismiss(); }
+    @Override public void dismiss() { if (toolbar != null) toolbar.dismissPopupMenus(); stopVideo(); super.dismiss(); }
 }

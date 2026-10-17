@@ -296,7 +296,8 @@ public final class MobileFlowTest extends Instrumentation {
                 onMain(() -> { try { PinViewer viewer = (PinViewer)field(main, "detailDialog"); require(viewer.isShowing() && viewer.getWindow().getDecorView().hasWindowFocus(), "Copy did not dismiss the native popup and return focus to the viewer."); } catch (Exception error) { throw new RuntimeException(error); } });
                 click(main, "Details"); await(() -> has("Pin details"), 3000, "Details sheet did not open after copying."); click(main, "Close");
             }
-            click(main, "Remove pin"); click(main, "Keep"); click(main, "Close reference"); result.putString("checks", "Three consecutive copy/details/close sequences wait for native popup removal and retain viewer focus; remove cancellation and close work on a private display."); result.putString("status", "passed");
+            click(main, "Save to another collection"); await(() -> has("Save link"), 3000, "Save sheet did not open after closing the viewer."); click(main, "Cancel"); await(main::hasWindowFocus, 3000, "Save cancellation did not return to the board.");
+            onMain(() -> description(main.getWindow().getDecorView(), "Open pin: Menu reference").performClick()); click(main, "Remove pin"); click(main, "Keep"); click(main, "Close reference"); result.putString("checks", "Three consecutive copy/details/close sequences wait for native popup removal and retain viewer focus; save-to-collection/cancel, remove cancellation and close work on a private display."); result.putString("status", "passed");
         } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); }
         finally { onMain(() -> { if (main != null && !main.isDestroyed()) main.finishAndRemoveTask(); }); waitForIdleSync(); if (display != null) display.release(); if (output != null) output.close(); }
         finish("passed".equals(result.getString("status")) ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
@@ -360,7 +361,7 @@ public final class MobileFlowTest extends Instrumentation {
             }
             require(view.isClickable(), "Control is not clickable: " + label); view.performClick(); clicked[0] = true;
         }); return clicked[0]; }, 5000, "Missing focused control: " + label); } catch (Exception error) { throw new RuntimeException(error); }
-        if (selectedPopup[0] != null) try { await(() -> { boolean[] dismissed = new boolean[1]; onMain(() -> dismissed[0] = !WindowInspector.getGlobalWindowViews().contains(selectedPopup[0])); return dismissed[0]; }, 5000, "Selected menu did not dismiss: " + label); } catch (Exception error) { throw new RuntimeException(error); }
+        if (selectedPopup[0] != null) try { await(() -> { boolean[] dismissed = new boolean[1]; onMain(() -> dismissed[0] = !WindowInspector.getGlobalWindowViews().contains(selectedPopup[0])); return dismissed[0]; }, 5000, "Selected menu did not dismiss: " + label + " attached=" + selectedPopup[0].isAttachedToWindow() + " shown=" + selectedPopup[0].isShown() + " focus=" + selectedPopup[0].hasWindowFocus()); } catch (Exception error) { throw new RuntimeException(error); }
     }
     private View findWindow(String label) { for (View window : WindowInspector.getGlobalWindowViews()) if (window.hasWindowFocus() && window.getDisplay() != null && window.getDisplay().getDisplayId() == displayId) { View found = find(window, label); if (found != null && found.isShown()) return found; } return null; }
     private View findPopup(String label) { for (View window : WindowInspector.getGlobalWindowViews()) if (window != main.getWindow().getDecorView() && window.hasWindowFocus() && window.getDisplay() != null && window.getDisplay().getDisplayId() == displayId) { View found = find(window, label); if (found != null && found.isShown()) return found; } return null; }
@@ -394,6 +395,7 @@ public final class MobileFlowTest extends Instrumentation {
     }
     private void pinActions() throws Exception {
         PinViewer viewer = (PinViewer)field(main, "detailDialog");
+        await(() -> viewer != null && viewer.isShowing() && viewer.getWindow().getDecorView().hasWindowFocus(), 3000, "Pin viewer did not regain focus before reopening its menu.");
         require(viewer != null && !has("Details") && !has("Next") && !has("Previous"), "Viewer exposes pin actions outside its overflow.");
         click(main, "More options"); await(() -> has("Copy link") && has("Open original") && has("Details"), 3000, "Pin actions are missing from overflow.");
         require(!has("Previous pin") && !has("Next pin"), "Pin navigation still occupies the menu.");
