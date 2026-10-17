@@ -62,6 +62,54 @@ public final class MobileLibraryStorageTest extends Instrumentation {
             store.removeCollection(collection);
         }
     }
+    private static void captureVideos(MobileLibrary store, Context context) throws Exception {
+        byte[] video = new byte[] {0, 0, 0, 8, 'f', 't', 'y', 'p'}, poster = image(android.graphics.Color.GREEN);
+        java.util.concurrent.atomic.AtomicBoolean available = new java.util.concurrent.atomic.AtomicBoolean(true);
+        try (ServerSocket server = new ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"))) {
+            String base = "http://127.0.0.1:" + server.getLocalPort();
+            Thread responder = new Thread(() -> {
+                while (!server.isClosed()) try (Socket socket = server.accept()) {
+                    BufferedReader input = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
+                    String path = input.readLine().split(" ")[1], line, referer = "";
+                    while ((line = input.readLine()) != null && !line.isEmpty()) if (line.toLowerCase(java.util.Locale.ROOT).startsWith("referer:")) referer = line.substring(8).trim();
+                    String type = "text/html", extra = ""; int status = 200; byte[] body;
+                    if (path.equals("/redirect")) { status = 302; extra = "Location: /pages/base\r\n"; body = new byte[0]; }
+                    else if (path.startsWith("/media/video")) { type = path.contains("webm") ? "video/webm" : "video/mp4"; body = video; if (!available.get() || path.contains("signed") && (!path.endsWith("?a=1&b=2") || referer.isEmpty())) status = 403; }
+                    else if (path.equals("/poster")) { type = "image/png"; body = poster; }
+                    else if (path.equals("/large")) { type = "video/mp4"; extra = "Content-Length: 33554433\r\n"; body = new byte[0]; }
+                    else {
+                        String html = "<title>Phone video test</title><meta property='og:image' content='/poster'>";
+                        if (path.equals("/og")) html += "<meta content='/media/video.mp4' property='og:video'>";
+                        else if (path.equals("/twitter")) html += "<meta name=twitter:player:stream content=/media/video.webm>";
+                        else if (path.equals("/video")) html += "<video controls src='/media/video.mp4'></video>";
+                        else if (path.equals("/sources")) html += "<meta property=og:video content='/player'><video><source src='/player'><source type=video/mp4 src=/media/video.mp4></video>";
+                        else if (path.equals("/pages/base")) html += "<base href='../media/'><video><source src='video.mp4'></video>";
+                        else if (path.equals("/signed")) html += "<meta property='og:video:url' content='/media/video-signed.mp4?a=1&amp;b=2'>";
+                        else if (path.equals("/invalid")) html += "<meta property=og:video content='file:///private.mp4'>";
+                        else if (path.equals("/oversized")) html += "<video src='/large'></video>";
+                        body = html.getBytes(StandardCharsets.UTF_8);
+                    }
+                    socket.getOutputStream().write(("HTTP/1.1 " + status + " Response\r\nContent-Type: " + type + "\r\n" + extra + (extra.contains("Content-Length:") ? "" : "Content-Length: " + body.length + "\r\n") + "Connection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII)); socket.getOutputStream().write(body);
+                } catch (Exception error) { if (server.isClosed()) return; }
+            }); responder.setDaemon(true); responder.start();
+            String collection = store.create("Video capture check");
+            for (String route : new String[] {"/og", "/twitter", "/video", "/sources", "/redirect", "/signed", "/media/video.mp4"}) {
+                String id = store.add(collection, base + route); LocalCapture.sync(context); JSONObject captured = pin(store, id);
+                require("saved".equals(captured.optString("capture")) && "video".equals(captured.optString("kind")), "Page saved a poster instead of video: " + route + " " + captured);
+                File file = store.mediaFile(captured.getString("mediaFile")); require(Arrays.equals(video, Files.readAllBytes(file.toPath())), "Saved video bytes changed: " + route);
+                if (route.equals("/og")) {
+                    available.set(false); store.retry(id); LocalCapture.sync(context);
+                    require("failed".equals(pin(store, id).optString("capture")) && file.getName().equals(pin(store, id).optString("mediaFile")) && Arrays.equals(video, Files.readAllBytes(file.toPath())), "Failed video retry replaced its offline copy with a poster."); available.set(true);
+                    store.retry(id); LocalCapture.sync(context); require(!file.exists(), "Successful video recapture retained its old file.");
+                }
+            }
+            for (String route : new String[] {"/invalid", "/oversized"}) {
+                String id = store.add(collection, base + route); LocalCapture.sync(context); JSONObject captured = pin(store, id);
+                require("failed".equals(captured.optString("capture")) && "image".equals(captured.optString("kind")) && Arrays.equals(poster, Files.readAllBytes(store.mediaFile(captured.getString("mediaFile")).toPath())), "Failed video did not retain its link and poster: " + route);
+            }
+            store.removeCollection(collection);
+        }
+    }
     @Override public void onCreate(Bundle args) { super.onCreate(args); start(); }
     @Override public void onStart() {
         Bundle result = new Bundle();
@@ -114,8 +162,9 @@ public final class MobileLibraryStorageTest extends Instrumentation {
             require(!replacement.exists() && store.snapshot().getJSONArray("pins").length() == 0, "Collection deletion left its cached preview.");
             require(new File(context.getFilesDir(), "mobile-media").list().length == 0, "Unused preview files remain.");
             captureRollback(store, context, database);
+            captureVideos(store, context);
             require(new File(context.getFilesDir(), "mobile-media").list().length == 0, "Recapture cleanup left media behind.");
-            result.putString("stream", "Mobile storage checks passed: replacement, retained cache, failed commit, reopen, shared ownership, final cleanup, actual HTTP recapture rollback, and successful retry.\n");
+            result.putString("stream", "Mobile storage checks passed: replacement, retained cache, failed commit, reopen, shared ownership, cleanup and HTTP recapture rollback/retry; seven direct/OG/Twitter/video/source/base/redirect/signed-URL video saves; failed-video retention/retry; invalid-scheme and oversized video poster fallback/cleanup.\n");
             finish(Activity.RESULT_OK, result);
         } catch (Throwable error) {
             result.putString("stream", "Mobile storage check failed: " + android.util.Log.getStackTraceString(error));
