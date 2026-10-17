@@ -56,6 +56,7 @@ public final class MobileFlowTest extends Instrumentation {
     @Override public void callActivityOnCreate(Activity activity, Bundle saved) { super.callActivityOnCreate(activity, saved); if (activity instanceof MainActivity) main = (MainActivity)activity; }
     @Override public void onCreate(Bundle args) { super.onCreate(args); arguments = args; start(); }
     @Override public void onStart() {
+        if ("true".equals(arguments.getString("framesOnly"))) { phoneFramesOnly(); return; }
         if ("true".equals(arguments.getString("mediaOnly"))) { mediaOnly(); return; }
         if ("true".equals(arguments.getString("scrollOnly"))) { scrollOnly(); return; }
         if ("true".equals(arguments.getString("locationOnly"))) { locationOnly(); return; }
@@ -177,6 +178,59 @@ public final class MobileFlowTest extends Instrumentation {
         }
         finish("passed".equals(result.getString("status")) ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
     }
+    private void phoneFramesOnly() {
+        Bundle result = new Bundle();
+        try {
+            require("com.papan.share.test".equals(getTargetContext().getPackageName()), "Only the disposable test package is allowed.");
+            createDisplay(720, 1440); result.putInt("displayId", displayId);
+            MobileLibrary store = MobileLibrary.get(getTargetContext()); String collection = store.create("Phone portraits");
+            File media = new File(getTargetContext().getFilesDir(), "mobile-media"); media.mkdirs();
+            File video = new File(media, java.util.UUID.randomUUID() + ".mp4"), portrait = new File(media, java.util.UUID.randomUUID() + ".png"), wide = new File(media, java.util.UUID.randomUUID() + ".png");
+            try (java.io.InputStream source = new java.net.URL(arguments.getString("mediaUrl").replace("/gallery", "/movie.mp4")).openStream()) { java.nio.file.Files.copy(source, video.toPath()); }
+            frameImage(portrait, 90, 160); frameImage(wide, 160, 90);
+            String first = null;
+            for (int i = 0; i < 18; i++) { String id = store.add(collection, "https://example.com/frame/" + i); if (i == 0) first = id; store.captured(id, new JSONObject().put("title", "Frame " + i).put("mediaFile", i % 2 == 0 ? video.getName() : portrait.getName()).put("kind", i % 2 == 0 ? "video" : "image").put("capture", "saved")); }
+            main = (MainActivity)startActivitySync(new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), ActivityOptions.makeBasic().setLaunchDisplayId(displayId).toBundle());
+            await(() -> main.hasWindowFocus() && !busy(), 10000, "Portrait phone board did not initialize on its private display.");
+            awaitFrameRatio(90.0 / 160, "Phone portrait videos/images were forced into square frames."); alignedBoard();
+            awaitBoardVideos(); LocalVideoPreview playing = boardVideos().get(0);
+            await(() -> videoPosition(playing) > 2000, 8000, "Local board video did not advance."); await(() -> videoPosition(playing) >= 0 && videoPosition(playing) < 1000, 5000, "Local board video did not loop.");
+            onMain(() -> { Bitmap frame = playing.getBitmap(); require(frame != null && android.graphics.Color.red(frame.getPixel(frame.getWidth() / 2, frame.getHeight() / 2)) > 180, "Board preview did not render decoded video pixels."); frame.recycle(); });
+            onMain(() -> { try { RecyclerView board = (RecyclerView)field(main, "pinGrid"); board.scrollBy(0, board.getHeight() * 2); } catch (Exception error) { throw new RuntimeException(error); } });
+            await(() -> field(playing, "player") == null, 5000, "Offscreen board video retained its decoder."); awaitBoardVideos();
+            onMain(() -> { try { ((RecyclerView)field(main, "pinGrid")).scrollToPosition(0); } catch (Exception error) { throw new RuntimeException(error); } }); await(() -> grid().findFirstVisibleItemPosition() == 0, 5000, "Portrait board did not return to its first row."); awaitBoardVideos();
+            click(main, "Open pin: Frame 16"); await(() -> viewerVideo() != null && viewerVideo().isPlaying(), 10000, "Autoplay tile did not open its full-screen video."); await(() -> boardVideos().stream().allMatch(this::videoReleased), 5000, "Board videos continued behind the viewer."); click(main, "Close reference"); awaitBoardVideos();
+            ActivityMonitor background = addMonitor(ScanActivity.class.getName(), null, false);
+            try { MainActivity retained = main; java.util.List<LocalVideoPreview> previous = boardVideos(); onMain(() -> retained.startActivity(new Intent(retained, ScanActivity.class))); Activity covering = background.waitForActivityWithTimeout(10000); require(covering != null && covering.getDisplay().getDisplayId() == displayId, "Background check left the private display."); await(() -> !(Boolean)field(retained, "foreground") && previous.stream().allMatch(this::videoReleased), 5000, "Backgrounded board retained a decoder."); onMain(covering::finish); await(() -> main.hasWindowFocus() && (Boolean)field(main, "foreground"), 10000, "Phone board did not return from background."); awaitBoardVideos(); } finally { removeMonitor(background); }
+            onMain(() -> require(imageFillsFrame(main.getWindow().getDecorView()), "Portrait previews do not fill their frames.")); screenshot(main, "phone-portrait-board.png");
+            View initial = ((RecyclerView)field(main, "pinGrid")).getChildAt(0); Bitmap decoded = imageBitmap(initial);
+            onMain(() -> { try { ((RecyclerView)field(main, "pinGrid")).getAdapter().notifyItemChanged(0); } catch (Exception error) { throw new RuntimeException(error); } });
+            await(() -> imageBitmap(((RecyclerView)field(main, "pinGrid")).getChildAt(0)) == decoded, 5000, "Rebinding a local portrait preview decoded it again.");
+            relaunch(600, 1400, 2); awaitFrameRatio(90.0 / 160, "Portrait frames changed at narrow width or 200% text."); alignedBoard(); controlsFit(); screenshot(main, "phone-portrait-large-text.png");
+            relaunch(720, 1440, 1); awaitFrameRatio(90.0 / 160, "Phone portrait proportions did not survive reopening.");
+            org.json.JSONArray attachments = new org.json.JSONArray().put(new JSONObject().put("id", "portrait").put("key", "portrait").put("kind", "video").put("mediaFile", video.getName())).put(new JSONObject().put("id", "landscape").put("key", "landscape").put("kind", "image").put("mediaFile", wide.getName()));
+            store.captured(first, new JSONObject().put("items", attachments).put("capture", "saved"));
+            onMain(() -> { try { ((EditText)field(main, "search")).setText("Frame 17"); } catch (Exception error) { throw new RuntimeException(error); } });
+            double mixed = (18 * 90.0 / 160 + 160.0 / 90) / 19;
+            awaitFrameRatio(mixed, "Filtered Phone board ignored an offscreen pin's additional attachment."); screenshot(main, "phone-mixed-filtered.png");
+            frameImage(portrait, 160, 90); require(portrait.setLastModified(System.currentTimeMillis() + 2000), "Could not change fixture modification time.");
+            onMain(() -> { try { Method refresh = MainActivity.class.getDeclaredMethod("refreshLocal"); refresh.setAccessible(true); refresh.invoke(main); } catch (Exception error) { throw new RuntimeException(error); } });
+            double changed = (9 * 90.0 / 160 + 10 * 160.0 / 90) / 19;
+            awaitFrameRatio(changed, "Replacing a local file retained stale frame proportions.");
+            onMain(() -> { try { ((EditText)field(main, "search")).setText(""); } catch (Exception error) { throw new RuntimeException(error); } }); alignedBoard(); screenshot(main, "phone-mixed-board.png");
+            awaitBoardVideos(); java.util.List<LocalVideoPreview> cropped = boardVideos(); onMain(() -> { for (LocalVideoPreview videoView : cropped) { android.graphics.RectF bounds = new android.graphics.RectF(0, 0, videoView.getWidth(), videoView.getHeight()); videoView.getTransform(new android.graphics.Matrix()).mapRect(bounds); require(bounds.width() >= videoView.getWidth() - 1 && bounds.height() >= videoView.getHeight() - 1 && Math.abs(bounds.width() / bounds.height() - 90.0 / 160) < .01, "Video crop stretched or left empty space in the frame."); } });
+            result.putString("checks", "Native saved portrait video/image tiles use 90:160 frames with aligned touching rows and crop-to-fill; rebound previews reuse decoded bitmaps; narrow/200% text and reopening retain proportions; complete collection averaging includes offscreen attachments despite search; replaced files invalidate dimensions. Visible saved board videos advance/loop and render decoded pixels, fit/crop without stretching, release decoders offscreen and behind the viewer/background, and resume on return. No physical phone used."); result.putString("status", "passed");
+        } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); if (main != null) try { screenshot(main, "failure.png"); } catch (Exception ignored) {} }
+        finally { onMain(() -> { if (main != null && !main.isDestroyed()) main.finishAndRemoveTask(); }); waitForIdleSync(); if (display != null) display.release(); if (output != null) output.close(); }
+        finish("passed".equals(result.getString("status")) ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
+    }
+    private void frameImage(File file, int width, int height) throws Exception { Bitmap image = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888); image.eraseColor(android.graphics.Color.GREEN); try (FileOutputStream stream = new FileOutputStream(file)) { require(image.compress(Bitmap.CompressFormat.PNG, 100, stream), "Could not create frame fixture."); } finally { image.recycle(); } }
+    private void awaitFrameRatio(double ratio, String message) throws Exception { await(() -> { boolean[] ready = {false}; onMain(() -> { try { RecyclerView board = (RecyclerView)field(main, "pinGrid"); View card = board.getChildAt(0); ready[0] = card != null && card.getHeight() > 0 && Math.abs((double)card.getWidth() / card.getHeight() - ratio) < .015 && hasImage(card); } catch (Exception error) { throw new RuntimeException(error); } }); return ready[0]; }, 15000, message); }
+    private java.util.List<LocalVideoPreview> boardVideos() { java.util.List<LocalVideoPreview> videos = new java.util.ArrayList<>(); onMain(() -> { try { collectBoardVideos((View)field(main, "pinGrid"), videos); } catch (Exception error) { throw new RuntimeException(error); } }); return videos; }
+    private void collectBoardVideos(View view, java.util.List<LocalVideoPreview> videos) { if (view instanceof LocalVideoPreview) videos.add((LocalVideoPreview)view); if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup)view).getChildCount(); i++) collectBoardVideos(((ViewGroup)view).getChildAt(i), videos); }
+    private boolean videoReleased(LocalVideoPreview view) { try { return field(view, "player") == null; } catch (Exception error) { throw new RuntimeException(error); } }
+    private int videoPosition(LocalVideoPreview view) { int[] position = {-1}; onMain(() -> { try { android.media.MediaPlayer player = (android.media.MediaPlayer)field(view, "player"); if (player != null && (Boolean)field(view, "prepared") && player.isPlaying()) { require(player.isLooping(), "Board video is not looping."); position[0] = player.getCurrentPosition(); } } catch (Exception error) { throw new RuntimeException(error); } }); return position[0]; }
+    private void awaitBoardVideos() throws Exception { await(() -> { java.util.List<LocalVideoPreview> videos = boardVideos(); onMain(() -> videos.removeIf(view -> !view.getGlobalVisibleRect(new android.graphics.Rect()))); return !videos.isEmpty() && videos.stream().allMatch(view -> videoPosition(view) > 200 && view.getAlpha() == 1); }, 15000, "Visible local board videos did not autoplay."); }
     private void mediaOnly() {
         Bundle result = new Bundle();
         try {

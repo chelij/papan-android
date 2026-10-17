@@ -10,6 +10,7 @@
     "test:location-menu": "node scripts/test-location-menu.mjs",
     "test:pin-menu": "node scripts/test-pin-menu.mjs",
     "test:media-selection": "node scripts/test-media-selection.mjs",
+    "test:phone-frames": "node scripts/test-media-selection.mjs --frames",
     "test:scroll-controls": "node scripts/test-scroll-controls.mjs",
     "test:links": "node scripts/test-links.mjs",
     "test:capture": "node scripts/test-capture.mjs",

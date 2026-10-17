@@ -141,9 +141,12 @@ public final class MainActivity extends AppCompatActivity {
     @Override public void onStart() { super.onStart(); foreground = true; pollUntil = SystemClock.elapsedRealtime() + 30000; sync(); capture(); if (remote) loadDesktop(false, true); else if (!activityOpen) refreshLocal(); }
     @Override public void onWindowFocusChanged(boolean focused) {
         super.onWindowFocusChanged(focused);
+        syncBoardVideos();
         if (!focused && snackbar != null) snackbar.dismiss();
         if (focused && foreground && messagePending) showBoardMessage();
     }
+    @Override public void onPause() { stopBoardVideos(); super.onPause(); }
+    @Override public void onResume() { super.onResume(); if (pinGrid != null) pinGrid.post(this::syncBoardVideos); }
     @Override public void onStop() {
         appearance.edit().putString("selectedLocal", selectedLocal).putString("selectedRemote", selectedRemote).apply();
         foreground = false; handler.removeCallbacks(poll); handler.removeCallbacks(browsePoll); handler.removeCallbacks(detailPoll); handler.removeCallbacks(searchPoll); boardGeneration++;
@@ -219,6 +222,8 @@ public final class MainActivity extends AppCompatActivity {
         boardScroll = new NestedScrollView(this); boardScroll.setFillViewport(true); board = column(); board.setPadding(dp(16), dp(4), dp(16), dp(80)); boardScroll.addView(board); canvas.addView(boardScroll, new FrameLayout.LayoutParams(-1, -1));
         pinGrid = new RecyclerView(this); pinGrid.setPadding(0, dp(4), 0, dp(80)); pinGrid.setClipToPadding(false); pinGrid.setHasFixedSize(true); pinGrid.setItemAnimator(null); pinGrid.setVisibility(View.GONE); canvas.addView(pinGrid, new FrameLayout.LayoutParams(-1, -1));
         pinGrid.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> { if (right - left != oldRight - oldLeft && pinGrid.getAdapter() != null) pinGrid.post(this::renderPins); });
+        pinGrid.addOnScrollListener(new RecyclerView.OnScrollListener() { @Override public void onScrolled(RecyclerView view, int dx, int dy) { syncBoardVideos(); } });
+        pinGrid.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> syncBoardVideos());
         actions = row(); actions.setPadding(dp(16), dp(8), dp(16), dp(16));
         CoordinatorLayout.LayoutParams actionParams = new CoordinatorLayout.LayoutParams(-1, -2); actionParams.gravity = Gravity.BOTTOM; screen.addView(actions, actionParams);
         appBar.addOnOffsetChangedListener((AppBarLayout.OnOffsetChangedListener)(bar, offset) -> syncBars(offset));
@@ -376,7 +381,22 @@ public final class MainActivity extends AppCompatActivity {
     private boolean fillFrames() { return appearance.getBoolean("fill:" + boardPreferenceKey(), true); }
     private void retainRemoteImages(JSONArray collections) { java.util.Set<String> authorized = new java.util.HashSet<>(); for (int i = 0; i < collections.length(); i++) { JSONObject collection = collections.optJSONObject(i); if (collection != null && !collection.optBoolean("locked")) authorized.add(collection.optString("id")); } previewImages.retainRemote(authorized); }
     private boolean measuredItem(JSONObject item) { return item.optDouble("previewWidth", item.optDouble("width", 0)) > 0 && item.optDouble("previewHeight", item.optDouble("height", 0)) > 0; }
-    private double frameRatio(JSONObject collection) {
+    private double frameRatio(JSONObject collection, JSONArray pins) {
+        if (!remote) {
+            MobileLibrary store; try { store = MobileLibrary.get(this); } catch (Exception ignored) { return 1; }
+            double sum = 0; int count = 0; String collectionId = collection == null ? "" : collection.optString("id");
+            for (int p = 0; p < pins.length(); p++) {
+                JSONObject pin = pins.optJSONObject(p); if (pin == null || !collectionId.equals(pin.optString("collectionId"))) continue;
+                JSONArray items = pin.optJSONArray("items"); if (items == null || items.length() == 0) items = new JSONArray().put(pin);
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject item = items.optJSONObject(i); if (item == null) continue; String kind = item.optString("kind", "image"); if (!("image".equals(kind) || "video".equals(kind))) continue;
+                    File file = store.mediaFile(item.optString("mediaFile", pin.optString("mediaFile")));
+                    double ratio = previewImages.localRatio(file, kind, () -> { if (!isDestroyed() && foreground && !remote && !activityOpen && collectionId.equals(selectedLocal)) { pinGrid.removeCallbacks(resizeBoard); pinGrid.postOnAnimation(resizeBoard); } });
+                    if (ratio > 0) { sum += ratio; count++; }
+                }
+            }
+            double ratio = count > 0 ? sum / count : 1; return Double.isFinite(ratio) && ratio >= .05 && ratio <= 20 ? ratio : 1;
+        }
         JSONObject preview = remote && collection != null ? collection.optJSONObject("preview") : null; if (preview == null || "cover".equals(preview.optString("fit"))) return 1;
         double count = Math.max(0, preview.optInt("measuredCount")), sum = preview.optDouble("aspectRatio", 1) * count; java.util.Set<String> known = new java.util.HashSet<>();
         for (int p = 0; p < remotePins.length(); p++) { JSONArray items = remotePins.optJSONObject(p).optJSONArray("items"); for (int i = 0; items != null && i < items.length(); i++) { JSONObject item = items.optJSONObject(i); if (item != null && measuredItem(item)) known.add(item.optString("id")); } }
@@ -442,6 +462,16 @@ public final class MainActivity extends AppCompatActivity {
         });
     }
     private void clearBoard() { revealChrome(); pinGrid.removeCallbacks(resizeBoard); pinGrid.setVisibility(View.GONE); pinGrid.setAdapter(null); boardScroll.setVisibility(View.VISIBLE); board.removeAllViews(); }
+    private void stopBoardVideos() { if (pinGrid != null) for (int i = 0; i < pinGrid.getChildCount(); i++) { RecyclerView.ViewHolder holder = pinGrid.getChildViewHolder(pinGrid.getChildAt(i)); if (holder instanceof CardHolder && ((CardHolder)holder).video != null) ((CardHolder)holder).video.setActive(false); } }
+    private void syncBoardVideos() {
+        if (pinGrid == null) return;
+        android.graphics.Rect viewport = new android.graphics.Rect(); boolean play = foreground && !remote && !activityOpen && detailDialog == null && hasWindowFocus() && pinGrid.isShown() && pinGrid.getGlobalVisibleRect(viewport);
+        for (int i = 0; i < pinGrid.getChildCount(); i++) {
+            RecyclerView.ViewHolder holder = pinGrid.getChildViewHolder(pinGrid.getChildAt(i)); if (!(holder instanceof CardHolder)) continue;
+            LocalVideoPreview video = ((CardHolder)holder).video; if (video == null) continue;
+            android.graphics.Rect bounds = new android.graphics.Rect(); video.setActive(play && video.getGlobalVisibleRect(bounds) && android.graphics.Rect.intersects(viewport, bounds));
+        }
+    }
     private void renderPins() {
         if (board == null || activityOpen) return;
         try {
@@ -467,7 +497,7 @@ public final class MainActivity extends AppCompatActivity {
             // A second size event can arrive before the replacement layout has attached cards.
             if (anchor == null && key.equals(gridKey)) { first = gridAnchor; offset = gridAnchorOffset; }
             gridAnchor = first; gridAnchorOffset = offset;
-            double ratio = frameRatio(collection);
+            double ratio = frameRatio(collection, values);
             int frameWidth = Math.max(48, available / columns), frameHeight = Math.max(Math.round(56 * getResources().getConfiguration().fontScale), (int)Math.round(frameWidth / ratio));
             PinAdapter adapter = new PinAdapter(pins, remote, frameHeight); GridLayoutManager layout = new GridLayoutManager(this, columns);
             final int spanCount = columns;
@@ -489,13 +519,14 @@ public final class MainActivity extends AppCompatActivity {
         }
         @Override public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
             if (!(holder instanceof CardHolder)) { Button more = (Button)holder.itemView; more.setText(loadingMore ? "Loading pins…" : "Load more pins"); more.setEnabled(!loadingMore); return; }
-            CardHolder card = (CardHolder)holder; JSONObject pin = pins.get(position); card.body.removeAllViews(); card.itemView.setContentDescription("Open pin: " + pin.optString("title")); card.itemView.setOnClickListener(v -> openPin(pin, fromDesktop));
+            CardHolder card = (CardHolder)holder; JSONObject pin = pins.get(position); if (card.video != null) card.video.setActive(false); card.video = null; card.body.removeAllViews(); card.itemView.setContentDescription("Open pin: " + pin.optString("title")); card.itemView.setOnClickListener(v -> openPin(pin, fromDesktop));
             FrameLayout preview = new FrameLayout(MainActivity.this); preview.setBackgroundColor(getColor(R.color.papan_background)); card.body.addView(preview, new LinearLayout.LayoutParams(-1, dp(frameHeight)));
             String notice = !fromDesktop && "pending".equals(pin.optString("capture")) ? "Preparing preview…" : !fromDesktop && "failed".equals(pin.optString("capture")) ? "Preview unavailable" : null;
             try {
                 JSONObject item = cover(pin, fromDesktop);
                 if (item != null && ("image".equals(item.optString("kind")) || !fromDesktop && "video".equals(item.optString("kind")) || fromDesktop && item.has("thumbnailUrl"))) preview.addView(imageFrame(pin, item, fromDesktop, fillFrames()), new FrameLayout.LayoutParams(-1, -1));
                 else if (notice == null) { String excerpt = item == null ? pin.optString("notes") : item.optString("text"); TextView kind = text(excerpt.isEmpty() ? item != null && "video".equals(item.optString("kind")) ? "Video" : "Saved link" : excerpt, 16); kind.setTextColor(MUTED); kind.setPadding(dp(12), dp(10), dp(12), 0); kind.setEllipsize(android.text.TextUtils.TruncateAt.END); kind.setMaxLines(1); preview.addView(kind, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP)); }
+                if (!fromDesktop && item != null && "video".equals(item.optString("kind"))) { File file = MobileLibrary.get(MainActivity.this).mediaFile(item.optString("mediaFile", pin.optString("mediaFile"))); if (file != null && file.isFile()) { card.video = new LocalVideoPreview(MainActivity.this, file, fillFrames()); preview.addView(card.video, new FrameLayout.LayoutParams(-1, -1)); } }
             } catch (Exception error) { TextView failed = text("Preview unavailable", 14); failed.setPadding(dp(12), dp(10), dp(12), 0); preview.addView(failed); }
             LinearLayout overlay = new LinearLayout(MainActivity.this) { @Override protected void onMeasure(int width, int height) { super.onMeasure(width, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)); } }, caption = column(); overlay.setOrientation(LinearLayout.VERTICAL);
             overlay.setBackground(new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, new int[] {Color.TRANSPARENT, 0x8C000000, 0xA6000000}));
@@ -509,10 +540,13 @@ public final class MainActivity extends AppCompatActivity {
             View placeholder = preview.getChildAt(0); if (placeholder instanceof TextView) { placeholder.setBackgroundColor(getColor(R.color.papan_background)); preview.bringChildToFront(placeholder); }
             if (notice != null) { TextView state = text(notice, 12); state.setTextColor(MUTED); state.setBackgroundColor(getColor(R.color.papan_background)); state.setPadding(dp(10), dp(6), dp(10), dp(6)); state.setMaxLines(1); state.setEllipsize(android.text.TextUtils.TruncateAt.END); preview.addView(state, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP)); }
         }
-        @Override public void onViewRecycled(RecyclerView.ViewHolder holder) { if (holder instanceof CardHolder) ((CardHolder)holder).body.removeAllViews(); }
+        @Override public void onViewAttachedToWindow(RecyclerView.ViewHolder holder) { pinGrid.post(MainActivity.this::syncBoardVideos); }
+        @Override public void onViewDetachedFromWindow(RecyclerView.ViewHolder holder) { if (holder instanceof CardHolder && ((CardHolder)holder).video != null) ((CardHolder)holder).video.setActive(false); }
+        @Override public void onViewRecycled(RecyclerView.ViewHolder holder) { if (holder instanceof CardHolder) { CardHolder card = (CardHolder)holder; if (card.video != null) card.video.setActive(false); card.video = null; card.body.removeAllViews(); } }
     }
     private static final class CardHolder extends RecyclerView.ViewHolder {
         final LinearLayout body;
+        LocalVideoPreview video;
         CardHolder(MaterialCardView card, LinearLayout content) { super(card); body = content; }
     }
     private FrameLayout imageFrame(JSONObject pin, JSONObject item, boolean fromDesktop, boolean crop) {
@@ -530,7 +564,7 @@ public final class MainActivity extends AppCompatActivity {
         try {
             final String url = fromDesktop ? thumbnail ? item.optString("thumbnailUrl", item.optString("previewUrl")) : item.optString("previewUrl") : "";
             final File saved = fromDesktop ? null : MobileLibrary.get(this).mediaFile(item.optString("mediaFile", pin.optString("mediaFile")));
-            String key = fromDesktop ? "remote:" + pin.optString("collectionId") + ":" + desktop.sessionId() + ":" + url : "local:" + saved + ":" + (saved == null ? "" : saved.lastModified() + ":" + saved.length()); key += thumbnail ? ":thumbnail" : ":viewer";
+            String key = fromDesktop ? "remote:" + pin.optString("collectionId") + ":" + desktop.sessionId() + ":" + url : PreviewImages.localKey(saved); key += thumbnail ? ":thumbnail" : ":viewer";
             if (!thumbnail) { String previewKey = fromDesktop ? "remote:" + pin.optString("collectionId") + ":" + desktop.sessionId() + ":" + item.optString("thumbnailUrl", item.optString("previewUrl")) + ":thumbnail" : key.substring(0, key.length() - ":viewer".length()) + ":thumbnail"; Bitmap ready = previewImages.peek(previewKey); if (ready != null) { view.setImageBitmap(ready); ((TextView)view.getTag()).setVisibility(View.GONE); } }
             previewImages.load(key, () -> {
                 if (!fromDesktop && "video".equals(item.optString("kind"))) {
@@ -545,7 +579,7 @@ public final class MainActivity extends AppCompatActivity {
                 else { file = saved; if (file == null) return null; BitmapFactory.decodeFile(file.toString(), options); }
                 int maximum = thumbnail ? 512 : 1536; options.inSampleSize = 1; while (options.outWidth / options.inSampleSize > maximum || options.outHeight / options.inSampleSize > maximum) options.inSampleSize *= 2; options.inJustDecodeBounds = false;
                 return fromDesktop ? BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options) : BitmapFactory.decodeFile(file.toString(), options);
-            }, bitmap -> { if (!isDestroyed()) { view.setImageBitmap(bitmap); TextView loading = (TextView)view.getTag(); if (bitmap != null) { loading.setVisibility(View.GONE); if (fromDesktop && thumbnail && !measuredItem(item)) { JSONObject collection = find(remoteCollections, pin.optString("collectionId")); double before = frameRatio(collection); boolean changed = previewImages.measure(pin.optString("collectionId"), item.optString("id"), (double)bitmap.getWidth() / bitmap.getHeight()); if (changed && remote && selectedRemote.equals(pin.optString("collectionId")) && Math.abs(before - frameRatio(collection)) > .001) { pinGrid.removeCallbacks(resizeBoard); pinGrid.postOnAnimation(resizeBoard); } } } else { loading.setText("Preview unavailable"); view.setContentDescription("Preview unavailable. " + pin.optString("title")); } } });
+            }, bitmap -> { if (!isDestroyed()) { view.setImageBitmap(bitmap); TextView loading = (TextView)view.getTag(); if (bitmap != null) { loading.setVisibility(View.GONE); if (fromDesktop && thumbnail && !measuredItem(item)) { JSONObject collection = find(remoteCollections, pin.optString("collectionId")); double before = frameRatio(collection, remotePins); boolean changed = previewImages.measure(pin.optString("collectionId"), item.optString("id"), (double)bitmap.getWidth() / bitmap.getHeight()); if (changed && remote && selectedRemote.equals(pin.optString("collectionId")) && Math.abs(before - frameRatio(collection, remotePins)) > .001) { pinGrid.removeCallbacks(resizeBoard); pinGrid.postOnAnimation(resizeBoard); } } } else { loading.setText("Preview unavailable"); view.setContentDescription("Preview unavailable. " + pin.optString("title")); } } });
         } catch (Exception ignored) { ((TextView)view.getTag()).setText("Preview unavailable"); }
     }
     private void newCollection(Runnable after) { EditText name = field("Collection name", false); LinearLayout body = dialogBody(); addField(body, name); AlertDialog value = new MaterialAlertDialogBuilder(this).setTitle("New phone collection").setView(scrolling(body)).setNegativeButton("Cancel", null).setPositiveButton("Create", null).create(); value.show(); value.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> { try { selectedLocal = MobileLibrary.get(this).create(name.getText().toString()); value.dismiss(); if (after != null) after.run(); else switchLocation(false); } catch (Exception error) { error(name, error.getMessage()); } }); }

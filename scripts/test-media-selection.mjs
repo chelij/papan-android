@@ -10,7 +10,8 @@ const serial = process.env.PAPAN_ANDROID_SERIAL || '', adb = process.env.PAPAN_A
 assert.match(serial, /^emulator-\d+$/, 'Media tests require a disposable emulator.'); assert.ok(adb);
 const run = (...args) => { const r = spawnSync(adb, ['-s', serial, ...args], { encoding: 'utf8', timeout: 60000, maxBuffer: 4 * 1024 * 1024 }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
 assert.equal(run('shell', 'getprop', 'ro.kernel.qemu').trim(), '1');
-const pkg = 'com.papan.share.test', out = path.resolve('artifacts/android/media-selection');
+const frames = process.argv.includes('--frames');
+const pkg = 'com.papan.share.test', out = path.resolve(frames ? 'artifacts/android/phone-frames' : 'artifacts/android/media-selection');
 assert.equal(run('shell', 'pm', 'list', 'packages', pkg).trim(), '', 'Use a fresh disposable test installation.');
 await mkdir(out, { recursive: true });
 const ffmpeg = process.env.PAPAN_FFMPEG; assert.ok(ffmpeg, 'Set PAPAN_FFMPEG to a local FFmpeg.');
@@ -33,17 +34,19 @@ const url = `http://10.0.2.2:${server.address().port}/gallery`, apk = path.resol
 let installed = false;
 try {
   run('install', '-r', apk); installed = true;
-  const args = ['-s', serial, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'mediaOnly', 'true', '-e', 'mediaUrl', url];
-  if (process.env.PAPAN_LIVE_MEDIA_URL) args.push('-e', 'liveUrl', process.env.PAPAN_LIVE_MEDIA_URL);
+  if (frames) run('shell', 'pm', 'grant', pkg, 'android.permission.CAMERA');
+  const args = ['-s', serial, 'shell', 'am', 'instrument', '-w', '-r', '-e', frames ? 'framesOnly' : 'mediaOnly', 'true', '-e', 'mediaUrl', url];
+  if (!frames && process.env.PAPAN_LIVE_MEDIA_URL) args.push('-e', 'liveUrl', process.env.PAPAN_LIVE_MEDIA_URL);
   args.push(`${pkg}/com.papan.share.MobileFlowTest`);
   const log = await new Promise((resolve, reject) => { const child = spawn(adb, args); let output = ''; child.stdout.on('data', data => output += data); child.stderr.on('data', data => output += data); child.on('error', reject); child.on('exit', code => code === 0 ? resolve(output) : reject(new Error(output))); });
   await writeFile(path.join(out, 'instrumentation.txt'), log);
   const passed = /INSTRUMENTATION_RESULT: status=passed/.test(log);
-  for (const name of ['media-choice.png', 'media-selected.png', 'selected-video-offline.png', ...(process.env.PAPAN_LIVE_MEDIA_URL ? ['live-media.json'] : [])]) {
+  const captures = frames ? ['phone-portrait-board.png', 'phone-portrait-large-text.png', 'phone-mixed-filtered.png', 'phone-mixed-board.png'] : ['media-choice.png', 'media-selected.png', 'selected-video-offline.png', ...(process.env.PAPAN_LIVE_MEDIA_URL ? ['live-media.json'] : [])];
+  for (const name of [...captures, ...(!passed ? ['failure.png'] : [])]) {
     const r = spawnSync(adb, ['-s', serial, 'exec-out', 'run-as', pkg, 'cat', `files/${name}`], { maxBuffer: 16 * 1024 * 1024 });
-    if (!passed && r.status !== 0) continue; assert.equal(r.status, 0, String(r.stderr)); await writeFile(path.join(out, name), r.stdout);
+    if (!passed && (r.status !== 0 || !r.stdout.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')))) continue; assert.equal(r.status, 0, String(r.stderr)); await writeFile(path.join(out, name), r.stdout);
   }
-  assert.ok(passed, log); assert.equal(videoRequests, 3, 'Video requests must cover the selected save, rejected commit and failed retry only.');
+  assert.ok(passed, log); assert.equal(videoRequests, frames ? 1 : 3, 'Video requests must match the fixture reads.');
   const report = { status: 'passed', apkSha256: createHash('sha256').update(await readFile(apk)).digest('hex'), device: serial, displayId: Number(log.match(/displayId=(\d+)/)?.[1]), physicalPhoneUsed: false, checks: log.match(/checks=(.*)/)?.[1], videoRequests };
   await writeFile(path.join(out, 'report.json'), JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify(report, null, 2));
 } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); if (installed) run('uninstall', pkg); }
