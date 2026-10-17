@@ -33,6 +33,25 @@ public final class MobileLibraryStorageTest extends Instrumentation {
         bitmap.eraseColor(color); ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, bytes); bitmap.recycle(); return bytes.toByteArray();
     }
+    private static void selectedStorage(MobileLibrary store, Context context, File database) throws Exception {
+        String collection = store.create("Attachment storage"), url = "https://example.com/selected", legacy = store.add(collection, url);
+        File old = store.mediaFile(legacy + ".jpg"); Files.write(old.toPath(), image(android.graphics.Color.RED)); store.captured(legacy, new JSONObject().put("mediaFile", old.getName()).put("kind", "image").put("capture", "saved"));
+        JSONObject plan = new JSONObject().put("engine", "direct").put("items", new JSONArray().put(new JSONObject().put("key", "one").put("kind", "image")).put(new JSONObject().put("key", "two").put("kind", "image")));
+        JSONArray keys = new JSONArray().put("one").put("two");
+        require(store.addSelection(collection, url, plan, keys).equals(legacy), "Choosing media duplicated an existing legacy pin.");
+        require(store.addSelection(collection, url, plan, keys).equals(legacy) && old.isFile(), "Repeated media selection duplicated a pin or deleted its previous preview.");
+        JSONArray items = pin(store, legacy).getJSONArray("items");
+        for (int i = 0; i < items.length(); i++) { String name = items.getJSONObject(i).getString("id") + ".png"; Files.write(store.mediaFile(name).toPath(), image(android.graphics.Color.BLUE)); items.getJSONObject(i).put("mediaFile", name); }
+        byte[] previous = Files.readAllBytes(database.toPath()); File blocked = new File(database + ".new"), marker = new File(blocked, "fixture"); require(blocked.mkdir() && marker.createNewFile(), "Could not block attachment commit.");
+        boolean failed = false; try { store.captured(legacy, new JSONObject().put("items", items).put("capture", "saved")); } catch (Exception expected) { failed = true; } finally { marker.delete(); blocked.delete(); }
+        require(failed && old.isFile() && Arrays.equals(previous, Files.readAllBytes(database.toPath())), "Failed attachment commit changed the old preview or library.");
+        store.captured(legacy, new JSONObject().put("items", items).put("capture", "saved"));
+        require(!old.exists() && pin(store, legacy).getString("mediaFile").equals(items.getJSONObject(0).getString("mediaFile")), "Attachments did not retain their v1 cover or clean the old media.");
+        String second = store.add(collection, "https://example.com/shared-selection"); store.captured(second, new JSONObject().put("items", items).put("capture", "saved")); store.removePin(legacy);
+        for (int i = 0; i < items.length(); i++) require(store.mediaFile(items.getJSONObject(i).getString("mediaFile")).isFile(), "Removing a pin deleted another pin's attachment.");
+        store.removeCollection(collection);
+        for (int i = 0; i < items.length(); i++) require(!store.mediaFile(items.getJSONObject(i).getString("mediaFile")).exists(), "Attachment cleanup left an unreferenced file.");
+    }
     private static void captureRollback(MobileLibrary store, Context context, File database) throws Exception {
         byte[] original = image(android.graphics.Color.RED), replacement = image(android.graphics.Color.BLUE);
         try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
@@ -163,8 +182,9 @@ public final class MobileLibraryStorageTest extends Instrumentation {
             require(new File(context.getFilesDir(), "mobile-media").list().length == 0, "Unused preview files remain.");
             captureRollback(store, context, database);
             captureVideos(store, context);
+            selectedStorage(store, context, database);
             require(new File(context.getFilesDir(), "mobile-media").list().length == 0, "Recapture cleanup left media behind.");
-            result.putString("stream", "Mobile storage checks passed: replacement, retained cache, failed commit, reopen, shared ownership, cleanup and HTTP recapture rollback/retry; seven direct/OG/Twitter/video/source/base/redirect/signed-URL video saves; failed-video retention/retry; invalid-scheme and oversized video poster fallback/cleanup.\n");
+            result.putString("stream", "Mobile storage checks passed: replacement, retained cache, failed commit, reopen, shared ownership, cleanup and HTTP recapture rollback/retry; seven direct/OG/Twitter/video/source/base/redirect/signed-URL video saves; failed-video retention/retry; invalid-scheme and oversized video poster fallback/cleanup; selected attachment deduplication, legacy pin upgrade and cover, atomic commit rollback, shared attachment ownership and cleanup.\n");
             finish(Activity.RESULT_OK, result);
         } catch (Throwable error) {
             result.putString("stream", "Mobile storage check failed: " + android.util.Log.getStackTraceString(error));

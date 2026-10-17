@@ -36,6 +36,7 @@ public final class LocalCapture {
     private static Content fetch(String value, int maximum) throws Exception {
         return fetch(value, maximum, null);
     }
+    static byte[] preview(String url) throws Exception { Content content = fetch(url, 8 * 1024 * 1024); if (!content.type.startsWith("image/")) throw new Exception("Preview unavailable."); return content.bytes; }
     private static Content fetch(String value, int maximum, String page) throws Exception {
         URI referrer = page == null ? null : validate(page);
         for (int redirect = 0; redirect < 5; redirect++) {
@@ -86,6 +87,42 @@ public final class LocalCapture {
     private static String extension(String type) {
         switch (type) { case "image/jpeg": return "jpg"; case "image/png": return "png"; case "image/webp": return "webp"; case "image/gif": return "gif"; case "video/mp4": return "mp4"; case "video/webm": return "webm"; default: return ""; }
     }
+    private static void selected(Context context, MobileLibrary store, JSONObject pin) throws Exception {
+        String engine = pin.getString("engine");
+        JSONObject inspection = "direct".equals(engine) ? (JSONObject)MediaExtractor.run(context, new JSONObject().put("action", "inspect").put("url", pin.getString("sourceUrl")).put("engine", engine), new AtomicBoolean(false)) : new JSONObject().put("engine", engine).put("items", pin.getJSONArray("items"));
+        JSONArray chosen = pin.getJSONArray("items"), candidates = inspection.getJSONArray("items"), ready = new JSONArray();
+        if (chosen.length() == 0 || chosen.length() > 50) throw new Exception("Choose between 1 and 50 media items.");
+        java.util.List<File> newFiles = new java.util.ArrayList<>(); File directory = java.nio.file.Files.createTempDirectory(context.getCacheDir().toPath(), "selected-media-").toFile();
+        boolean committed = false;
+        try {
+            JSONArray batch = null;
+            if (!"direct".equals(engine)) { JSONArray keys = new JSONArray(); for (int i = 0; i < chosen.length(); i++) keys.put(chosen.getJSONObject(i).getString("key")); batch = (JSONArray)MediaExtractor.run(context, new JSONObject().put("action", "download").put("url", pin.getString("sourceUrl")).put("engine", engine).put("keys", keys).put("items", chosen).put("output", directory.toString()), new AtomicBoolean(false)); if (batch.length() != chosen.length()) throw new Exception("The provider returned a different media selection."); }
+            for (int i = 0; i < chosen.length(); i++) {
+                JSONObject item = chosen.getJSONObject(i), source = null;
+                for (int j = 0; j < candidates.length(); j++) if (item.getString("key").equals(candidates.getJSONObject(j).optString("key"))) source = candidates.getJSONObject(j);
+                if (source == null || !item.getString("kind").equals(source.optString("kind"))) throw new Exception("The selected media changed. Paste the link again to choose media.");
+                File output = directory; JSONArray result = new JSONArray();
+                if (batch != null) { for (int j = 0; j < batch.length(); j++) if (item.getString("key").equals(batch.getJSONObject(j).optString("key"))) result.put(batch.getJSONObject(j)); }
+                else { output = new File(directory, Integer.toString(i)); if (!output.mkdir()) throw new Exception("Could not prepare the download."); JSONObject request = new JSONObject().put("action", "download").put("url", pin.getString("sourceUrl")).put("engine", engine).put("keys", new JSONArray().put(item.getString("key"))).put("item", source).put("output", output.toString()); result = (JSONArray)MediaExtractor.run(context, request, new AtomicBoolean(false)); }
+                if (result.length() != 1 || !item.getString("key").equals(result.getJSONObject(0).optString("key"))) throw new Exception("The provider returned different media.");
+                File downloaded = new File(result.getJSONObject(0).getString("file")).getCanonicalFile();
+                if (!downloaded.toPath().startsWith(output.getCanonicalFile().toPath()) || !downloaded.isFile() || downloaded.length() == 0 || downloaded.length() > 32L * 1024 * 1024) throw new Exception("The selected media could not be saved within 32 MiB.");
+                String ext = downloaded.getName().replaceFirst("^.*\\.", "").toLowerCase(Locale.ROOT);
+                if (!("video".equals(item.getString("kind")) ? ext.matches("mp4|webm") : ext.matches("jpg|png|webp|gif"))) throw new Exception("The provider returned an unsupported media format.");
+                if ("video".equals(item.getString("kind"))) { android.media.MediaMetadataRetriever decoder = new android.media.MediaMetadataRetriever(); try { decoder.setDataSource(downloaded.toString()); if (Integer.parseInt(decoder.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)) <= 0) throw new Exception("The source did not return a playable video."); } finally { decoder.release(); } }
+                else { android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options(); bounds.inJustDecodeBounds = true; android.graphics.BitmapFactory.decodeFile(downloaded.toString(), bounds); if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw new Exception("The source did not return an image."); }
+                String filename = UUID.nameUUIDFromBytes((pin.getString("id") + ":" + item.getString("key") + ":" + item.optString("mediaFile") + ":" + ext).getBytes(StandardCharsets.UTF_8)) + "." + ext;
+                File saved = store.mediaFile(filename); if (!saved.exists()) newFiles.add(saved); AtomicFile media = new AtomicFile(saved); FileOutputStream stream = null;
+                try (InputStream input = new java.io.FileInputStream(downloaded)) { stream = media.startWrite(); byte[] buffer = new byte[65536]; int count; while ((count = input.read(buffer)) != -1) stream.write(buffer, 0, count); media.finishWrite(stream); }
+                catch (Exception error) { media.failWrite(stream); throw error; }
+                ready.put(new JSONObject(item.toString()).put("mediaFile", filename));
+            }
+            committed = store.captured(pin.getString("id"), new JSONObject().put("items", ready).put("capture", "saved").put("captureError", ""));
+        } finally {
+            if (!committed) for (File file : newFiles) file.delete();
+            try (java.util.stream.Stream<java.nio.file.Path> paths = java.nio.file.Files.walk(directory.toPath())) { for (java.nio.file.Path path : (Iterable<java.nio.file.Path>)paths.sorted(java.util.Comparator.reverseOrder())::iterator) java.nio.file.Files.deleteIfExists(path); }
+        }
+    }
     public static void sync(Context context) throws Exception {
         if (!running.compareAndSet(false, true)) return;
         try {
@@ -94,6 +131,7 @@ public final class LocalCapture {
                 JSONObject pin = pins.getJSONObject(i); if (!"pending".equals(pin.optString("capture"))) continue;
                 String id = pin.getString("id"); File saved = null; boolean savedWasNew = false;
                 try {
+                    if (pin.has("items") && pin.has("engine")) { selected(context, store, pin); continue; }
                     Content source = fetch(pin.getString("sourceUrl"), 32 * 1024 * 1024); JSONObject details = new JSONObject().put("capture", "saved").put("captureError", "");
                     if (source.type.equals("text/html") || source.type.equals("application/xhtml+xml")) {
                         String html = new String(source.bytes, StandardCharsets.UTF_8), title = meta(html, "og:title");

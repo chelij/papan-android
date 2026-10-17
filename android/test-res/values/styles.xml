@@ -1,0 +1,8 @@
+<resources>
+  <style name="PapanWideMenuTest" parent="">
+    <item name="android:textViewStyle">@style/PapanWideMenuTextTest</item>
+  </style>
+  <style name="PapanWideMenuTextTest" parent="@android:style/Widget.TextView">
+    <item name="android:textScaleX">1.35</item>
+  </style>
+</resources>

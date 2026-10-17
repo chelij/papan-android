@@ -65,14 +65,37 @@ public final class MobileLibrary {
         JSONObject next = snapshot(); JSONArray pins = next.getJSONArray("pins");
         for (int i = 0; i < pins.length(); i++) if (pins.getJSONObject(i).getString("id").equals(id)) {
             JSONObject pin = pins.getJSONObject(i);
-            String previous = pin.optString("mediaFile");
-            for (String key : new String[] { "mediaFile", "kind", "capture", "captureError" }) if (details.has(key)) pin.put(key, details.get(key));
+            Set<String> previous = mediaNames(pin);
+            for (String key : new String[] { "mediaFile", "items", "kind", "capture", "captureError" }) if (details.has(key)) pin.put(key, details.get(key));
+            if (details.has("items")) { JSONObject first = details.getJSONArray("items").getJSONObject(0); pin.put("mediaFile", first.getString("mediaFile")).put("kind", first.getString("kind")); }
             if (details.has("title") && !pin.optBoolean("edited")) pin.put("title", details.getString("title"));
             commit(next);
-            if (!previous.isEmpty() && !previous.equals(pin.optString("mediaFile"))) deleteUnusedMedia(previous);
+            deleteUnusedMedia(previous.toArray(new String[0]));
             return true;
         }
         return false;
+    }
+    public synchronized String addSelection(String collectionId, String url, JSONObject inspection, JSONArray selected) throws Exception {
+        if (!LocalCapture.webLink(url).equals(url) || selected.length() == 0 || selected.length() > 50) throw new Exception("Choose between 1 and 50 media items.");
+        JSONObject next = snapshot(); requireCollection(next, collectionId); JSONArray pins = next.getJSONArray("pins"), items = new JSONArray(); Set<String> keys = new HashSet<>();
+        JSONArray candidates = inspection.getJSONArray("items");
+        for (int i = 0; i < selected.length(); i++) {
+            String key = selected.getString(i); if (!keys.add(key)) throw new Exception("A media item was selected twice."); JSONObject chosen = null;
+            for (int j = 0; j < candidates.length(); j++) if (key.equals(candidates.getJSONObject(j).optString("key"))) chosen = candidates.getJSONObject(j);
+            if (chosen == null || !("image".equals(chosen.optString("kind")) || "video".equals(chosen.optString("kind")))) throw new Exception("This media selection is no longer available.");
+            items.put(new JSONObject().put("id", UUID.randomUUID().toString()).put("key", key).put("kind", chosen.getString("kind")));
+        }
+        for (int i = 0; i < pins.length(); i++) {
+            JSONObject pin = pins.getJSONObject(i); if (!collectionId.equals(pin.optString("collectionId")) || !url.equals(pin.optString("sourceUrl"))) continue;
+            JSONArray existing = pin.optJSONArray("items"); Set<String> savedKeys = new HashSet<>();
+            for (int j = 0; existing != null && j < existing.length(); j++) savedKeys.add(existing.getJSONObject(j).optString("key"));
+            if (keys.equals(savedKeys) && inspection.optString("engine").equals(pin.optString("engine"))) return pin.getString("id");
+            if (existing == null) { pin.put("engine", inspection.getString("engine")).put("items", items).put("capture", "pending").put("captureError", ""); commit(next); return pin.getString("id"); }
+        }
+        if (pins.length() >= 5000) throw new Exception("Your phone library has reached 5,000 pins.");
+        String id = UUID.randomUUID().toString(), title = inspection.optString("title", url);
+        pins.put(new JSONObject().put("id", id).put("collectionId", collectionId).put("sourceUrl", url).put("title", title.substring(0, Math.min(200, title.length()))).put("notes", "").put("createdAt", System.currentTimeMillis()).put("engine", inspection.getString("engine")).put("items", items).put("capture", "pending"));
+        commit(next); return id;
     }
     public synchronized void edit(String id, String title, String notes) throws Exception {
         title = title.trim(); if (title.isEmpty() || title.length() > 200 || notes.length() > 10000) throw new Exception("Use a title of up to 200 characters and notes of up to 10,000.");
@@ -89,9 +112,13 @@ public final class MobileLibrary {
         next.put("pins", remaining);
         if (collection) { JSONArray collections = next.getJSONArray("collections"), kept = new JSONArray(); for (int i = 0; i < collections.length(); i++) if (!collections.getJSONObject(i).getString("id").equals(id)) kept.put(collections.getJSONObject(i)); next.put("collections", kept); }
         commit(next);
-        String[] names = new String[removed.length()];
-        for (int i = 0; i < removed.length(); i++) names[i] = removed.getJSONObject(i).optString("mediaFile");
-        deleteUnusedMedia(names);
+        Set<String> names = new HashSet<>(); for (int i = 0; i < removed.length(); i++) names.addAll(mediaNames(removed.getJSONObject(i)));
+        deleteUnusedMedia(names.toArray(new String[0]));
+    }
+    private static Set<String> mediaNames(JSONObject pin) {
+        Set<String> names = new HashSet<>(); names.add(pin.optString("mediaFile")); JSONArray items = pin.optJSONArray("items");
+        for (int i = 0; items != null && i < items.length(); i++) { JSONObject item = items.optJSONObject(i); if (item != null) names.add(item.optString("mediaFile")); }
+        return names;
     }
     private void deleteUnusedMedia(String... names) {
         Set<String> unused = new HashSet<>(Arrays.asList(names));
@@ -100,7 +127,7 @@ public final class MobileLibrary {
         for (int i = 0; i < pins.length(); i++) {
             JSONObject pin = pins.optJSONObject(i);
             if (pin == null) return;
-            unused.remove(pin.optString("mediaFile"));
+            unused.removeAll(mediaNames(pin));
         }
         for (String name : unused) { File saved = mediaFile(name); if (saved != null) saved.delete(); }
     }

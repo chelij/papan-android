@@ -128,7 +128,7 @@ final class PinViewer extends Dialog {
             video.setOnCompletionListener(player -> { if (video != active) return; playing = false; play.setText("Play"); play.setContentDescription("Play video"); updateProgress(); });
             video.setOnErrorListener((player, what, extra) -> { if (video != active) return true; prepared = false; playing = false; seek.setEnabled(false); status.setVisibility(View.VISIBLE); status.setText("This video cannot be played. Retry or open the original from the pin menu."); play.setText("Retry"); play.setContentDescription("Retry video"); return true; });
             if (desktop != null) { String url = item.optString("originalUrl", item.optString("previewUrl")); video.setVideoURI(Uri.parse(url), desktop.videoHeaders(url)); }
-            else if (localFile != null) video.setVideoURI(Uri.fromFile(localFile)); else throw new Exception("Saved video is unavailable.");
+            else { File file = item.has("mediaFile") ? MobileLibrary.get(getContext()).mediaFile(item.optString("mediaFile")) : localFile; if (file == null) throw new Exception("Saved video is unavailable."); video.setVideoURI(Uri.fromFile(file)); }
         } catch (Exception error) { status.setText(error.getMessage()); play.setText("Retry"); play.setContentDescription("Retry video"); }
     }
     private void fitVideo() {

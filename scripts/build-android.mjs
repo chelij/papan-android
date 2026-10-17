@@ -12,9 +12,10 @@ const run = (command, args) => { const result = spawnSync(command, args, { stdio
 const test = process.argv.includes('--test'), debug = test || process.argv.includes('--debug');
 const output = path.join(root, 'artifacts', 'android'); await mkdir(output, { recursive: true });
 const assets = path.join(output, 'gradle-assets'); await rm(path.join(assets, 'papan-source'), { recursive: true, force: true });
-for (const source of ['android/src', 'android/res', 'android/test', 'android/gradle', 'android/gradlew', 'android/gradlew.bat', 'android/build.gradle', 'android/settings.gradle', 'android/gradle.properties', 'android/gradle.lockfile', 'android/AndroidManifest.xml', 'android/isolated-manifest.xml', 'LICENSE', 'THIRD-PARTY.md', 'package.json', 'scripts/build-android.mjs', 'scripts/test-location-menu.mjs', 'scripts/test-pin-menu.mjs', 'scripts/test-scroll-controls.mjs']) {
+for (const source of ['android/src', 'android/res', 'android/test', 'android/test-res', 'android/python', 'android/media-runtime.lock.json', 'android/gradle', 'android/gradlew', 'android/gradlew.bat', 'android/build.gradle', 'android/settings.gradle', 'android/gradle.properties', 'android/gradle.lockfile', 'android/AndroidManifest.xml', 'android/isolated-manifest.xml', 'LICENSE', 'THIRD-PARTY.md', 'package.json', 'scripts/build-android.mjs', 'scripts/build-media-runtime.py', 'scripts/test-media-selection.mjs', 'scripts/test-location-menu.mjs', 'scripts/test-pin-menu.mjs', 'scripts/test-scroll-controls.mjs']) {
   const target = path.join(assets, 'papan-source', source); await mkdir(path.dirname(target), { recursive: true }); await cp(source, target, { recursive: true });
 }
+run(process.env.PAPAN_PYTHON || 'python3', [path.join(root, 'scripts/build-media-runtime.py')]);
 const license = path.join(assets, 'Apache-2.0.txt');
 try { await access(license); } catch {
   const response = await fetch('https://raw.githubusercontent.com/zxing/zxing/zxing-3.5.4/LICENSE', { signal: AbortSignal.timeout(30000) });

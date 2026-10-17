@@ -6,9 +6,10 @@
   "type": "module",
   "scripts": {
     "build:android": "node scripts/build-android.mjs",
-    "check": "node --check scripts/build-android.mjs && node --check scripts/test-location-menu.mjs && node --check scripts/test-pin-menu.mjs && node --check scripts/test-scroll-controls.mjs && node --check scripts/test-links.mjs && node --check scripts/test-capture.mjs && node --check scripts/test-storage.mjs",
+    "check": "node --check scripts/build-android.mjs && node --check scripts/test-media-selection.mjs && node --check scripts/test-location-menu.mjs && node --check scripts/test-pin-menu.mjs && node --check scripts/test-scroll-controls.mjs && node --check scripts/test-links.mjs && node --check scripts/test-capture.mjs && node --check scripts/test-storage.mjs",
     "test:location-menu": "node scripts/test-location-menu.mjs",
     "test:pin-menu": "node scripts/test-pin-menu.mjs",
+    "test:media-selection": "node scripts/test-media-selection.mjs",
     "test:scroll-controls": "node scripts/test-scroll-controls.mjs",
     "test:links": "node scripts/test-links.mjs",
     "test:capture": "node scripts/test-capture.mjs",
