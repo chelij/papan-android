@@ -277,8 +277,14 @@ public final class MobileFlowTest extends Instrumentation {
             createDisplay(720, 1440); result.putInt("displayId", displayId);
             main = (MainActivity)startActivitySync(new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), ActivityOptions.makeCustomAnimation(getTargetContext(), 0, 0).setLaunchDisplayId(displayId).toBundle());
             await(() -> main.hasWindowFocus() && !busy(), 10000, "Virtual location board did not initialize."); locationMotion(); locationSizing();
-            relaunch(600, 1400, 1); locationSizing(); relaunch(1280, 1600, 1); locationSizing(); relaunch(720, 1600, 2); locationSizing(); locationScrolling();
-            result.putString("checks", "Composited virtual-display motion frames keep the current button uncovered while the menu reveals upward; native location selection, stable dimensions/typography and current-button dismissal pass at 300dp/360dp/640dp and 200% text. All location labels stay on one line without ellipsis; a short 210dp display scrolls the native menu to its second destination. Compact controls retain 48dp tap targets, 40dp normal-size faces, scalable labels and dynamic clearance; Add activates outside its visible face. No physical phone used."); result.putString("status", "passed");
+            relaunch(600, 1400, 1); locationSizing(); relaunch(1280, 1600, 1); locationSizing(); relaunch(720, 1600, 2); locationSizing();
+            relaunch(720, 1440, 1); click(main, "Desktop");
+            TextView wider = (TextView)field(main, "locationButton"); await(() -> !wider.isLayoutRequested() && wider.getLayout() != null && wider.getLayout().getText().length() == 7, 3000, "Desktop layout did not settle before the font change.");
+            onMain(() -> { try { wider.setTextScaleX(1.3f); ((TextView)field(main, "collectionButton")).setTextScaleX(1.3f); } catch (Exception error) { throw new RuntimeException(error); } });
+            await(() -> !wider.isLayoutRequested(), 3000, "Wider font did not finish layout.");
+            onMain(() -> require(wider.getLayout().getLineCount() == 1 && wider.getLayout().getEllipsisCount(0) == 0, "Desktop is truncated after its font metrics change."));
+            locationSizing(); locationScrolling();
+            result.putString("checks", "Composited virtual-display motion frames keep the current button uncovered while the menu reveals upward; native location selection, stable dimensions/typography and current-button dismissal pass at 300dp/360dp/640dp and 200% text. Settled native layouts show every location label on one line without ellipsis, including after text metrics become 30% wider; a short 210dp display scrolls the native menu to its second destination. Compact controls retain 48dp tap targets, 40dp normal-size faces, scalable labels and dynamic clearance; Add activates outside its visible face. No physical phone used."); result.putString("status", "passed");
         } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); }
         finally { onMain(() -> { if (main != null && !main.isDestroyed()) main.finishAndRemoveTask(); }); waitForIdleSync(); if (display != null) display.release(); if (output != null) output.close(); }
         finish("passed".equals(result.getString("status")) ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
@@ -720,7 +726,9 @@ public final class MobileFlowTest extends Instrumentation {
     }
     private void locationSizing() throws Exception {
         compactControls();
-        TextView button = (TextView)field(main, "locationButton"), collection = (TextView)field(main, "collectionButton"); int width = button.getWidth(), height = button.getHeight(); int menuWidth = -1, menuHeight = -1;
+        TextView button = (TextView)field(main, "locationButton"), collection = (TextView)field(main, "collectionButton");
+        await(() -> !button.isLayoutRequested() && button.getLayout() != null, 3000, "Location button measurement did not settle.");
+        int width = button.getWidth(), height = button.getHeight(); int menuWidth = -1, menuHeight = -1;
         require(button.getTextSize() == collection.getTextSize() && button.getTypeface().equals(collection.getTypeface()), "Picker buttons use inconsistent typography.");
         for (String label : new String[] {"Desktop", "Activity", "Phone"}) {
             click(main, label);
@@ -729,7 +737,10 @@ public final class MobileFlowTest extends Instrumentation {
                 await(() -> !busy() && (main.getWindow().getAttributes().flags & android.view.WindowManager.LayoutParams.FLAG_SECURE) == 0, 10000, "Pointer checks require an unprotected fixture on the nonsecure virtual display.");
             }
             await(() -> button.getWidth() == width && button.getHeight() == height, 5000, "Location switching changed the button dimensions.");
-            onMain(() -> { require(button.isEnabled() && button.isClickable() && label.contentEquals(button.getText()), "Current location is unavailable on its button."); require(button.getLayout() != null && button.getLayout().getLineCount() == 1 && button.getLayout().getEllipsisCount(0) == 0 && button.getHeight() - button.getCompoundPaddingTop() - button.getCompoundPaddingBottom() >= button.getLayout().getHeight(), "Current location label wraps or clips at this font scale: " + label); button.performClick(); });
+            await(() -> !button.isLayoutRequested() && button.getLayout() != null && button.getLayout().getText().length() == label.length(), 3000, "Location text layout did not update for " + label);
+            onMain(() -> { require(button.isEnabled() && button.isClickable() && label.contentEquals(button.getText()), "Current location is unavailable on its button."); require(button.getLayout() != null && button.getLayout().getLineCount() == 1 && button.getLayout().getEllipsisCount(0) == 0 && button.getHeight() - button.getCompoundPaddingTop() - button.getCompoundPaddingBottom() >= button.getLayout().getHeight(), "Current location label wraps or clips at this font scale: " + label); });
+            if (label.equals("Desktop")) screenshot(main, "location-desktop-button.png");
+            onMain(button::performClick);
             await(() -> !main.hasWindowFocus(), 5000, "Location button did not open."); popupFits("location-" + label.toLowerCase(java.util.Locale.ROOT) + "-menu.png"); require(!has(label), "Active location is repeated in the menu.");
             androidx.appcompat.widget.ListPopupWindow menu = (androidx.appcompat.widget.ListPopupWindow)field(main, "locationMenu"); android.widget.ListView rows = menu.getListView();
             if (menuWidth < 0) { menuWidth = rows.getWidth(); menuHeight = rows.getHeight(); } else require(rows.getWidth() == menuWidth && rows.getHeight() == menuHeight, "Location menus change dimensions across windows.");

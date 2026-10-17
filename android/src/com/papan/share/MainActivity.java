@@ -220,7 +220,14 @@ public final class MainActivity extends AppCompatActivity {
         actions = row(); actions.setPadding(dp(16), dp(8), dp(16), dp(16));
         CoordinatorLayout.LayoutParams actionParams = new CoordinatorLayout.LayoutParams(-1, -2); actionParams.gravity = Gravity.BOTTOM; screen.addView(actions, actionParams);
         appBar.addOnOffsetChangedListener((AppBarLayout.OnOffsetChangedListener)(bar, offset) -> syncBars(offset));
-        locationButton = new ExtendedFloatingActionButton(this); locationButton.setTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodyLarge); locationButton.setAllCaps(false); locationButton.setSingleLine(true); locationButton.setHorizontallyScrolling(true); locationButton.setMaxLines(1); locationButton.setEllipsize(android.text.TextUtils.TruncateAt.END); locationButton.setMinHeight(dp(48)); locationButton.setMinimumHeight(dp(48)); locationButton.setInsetTop(dp(4)); locationButton.setInsetBottom(dp(4)); locationButton.setPaddingRelative(dp(12), dp(8), dp(12), dp(8)); locationButton.setIconSize(dp(20)); locationButton.setIconPadding(dp(8)); locationButton.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.papan_primary_container))); locationButton.setTextColor(getColor(R.color.papan_on_primary_container)); locationButton.setIconTint(ColorStateList.valueOf(getColor(R.color.papan_on_primary_container))); locationButton.setOnClickListener(v -> chooseLocation()); actions.addView(locationButton, new LinearLayout.LayoutParams(-2, -2));
+        locationButton = new ExtendedFloatingActionButton(this) {
+            @Override protected void onMeasure(int widthSpec, int heightSpec) {
+                int textWidth = 0; for (String label : LOCATION_LABELS) textWidth = Math.max(textWidth, (int)Math.ceil(android.text.Layout.getDesiredWidth(label, getPaint())));
+                int minimum = Math.max(dp(48), textWidth + getCompoundPaddingLeft() + getCompoundPaddingRight());
+                if (getMinWidth() != minimum) setMinWidth(minimum);
+                super.onMeasure(widthSpec, heightSpec);
+            }
+        }; locationButton.setTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodyLarge); locationButton.setAllCaps(false); locationButton.setSingleLine(true); locationButton.setHorizontallyScrolling(true); locationButton.setMaxLines(1); locationButton.setEllipsize(android.text.TextUtils.TruncateAt.END); locationButton.setMinHeight(dp(48)); locationButton.setMinimumHeight(dp(48)); locationButton.setInsetTop(dp(4)); locationButton.setInsetBottom(dp(4)); locationButton.setPaddingRelative(dp(12), dp(8), dp(12), dp(8)); locationButton.setIconSize(dp(20)); locationButton.setIconPadding(dp(8)); locationButton.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.papan_primary_container))); locationButton.setTextColor(getColor(R.color.papan_on_primary_container)); locationButton.setIconTint(ColorStateList.valueOf(getColor(R.color.papan_on_primary_container))); locationButton.setOnClickListener(v -> chooseLocation()); actions.addView(locationButton, new LinearLayout.LayoutParams(-2, -2));
         View flexible = new View(this); actions.addView(flexible, new LinearLayout.LayoutParams(dp(12), 0, 1));
         addLink = new FloatingActionButton(this); addLink.setSize(FloatingActionButton.SIZE_MINI); addLink.setEnsureMinTouchTargetSize(true); addLink.setMaxImageSize(dp(20)); addLink.setImageResource(R.drawable.add); addLink.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); addLink.setImageTintList(ColorStateList.valueOf(getColor(R.color.papan_on_primary))); addLink.setContentDescription("Add link"); addLink.setOnClickListener(v -> enterLink()); actions.addView(addLink, new LinearLayout.LayoutParams(-2, -2));
         View.OnFocusChangeListener revealActions = (view, focused) -> { if (focused) revealChrome(); };
@@ -233,10 +240,8 @@ public final class MainActivity extends AppCompatActivity {
         });
         actions.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             syncBars(appBar.getTop());
-            int width = 0; for (String label : LOCATION_LABELS) width = Math.max(width, (int)Math.ceil(locationButton.getPaint().measureText(label)));
-            width += locationButton.getPaddingStart() + locationButton.getPaddingEnd() + locationButton.getIconSize() + locationButton.getIconPadding() + dp(8);
-            width = Math.min(width, Math.max(dp(48), right - left - actions.getPaddingLeft() - actions.getPaddingRight() - addLink.getMeasuredWidth() - dp(12)));
-            if (locationButton.getMaxWidth() != width || locationButton.getMinWidth() != width) locationButton.setWidth(width);
+            int available = Math.max(dp(48), right - left - actions.getPaddingLeft() - actions.getPaddingRight() - addLink.getMeasuredWidth() - dp(12));
+            if (locationButton.getMaxWidth() != available) locationButton.setMaxWidth(available);
             int clearance = bottom - top + dp(8);
             if (pinGrid.getPaddingBottom() != clearance) pinGrid.setPadding(pinGrid.getPaddingLeft(), pinGrid.getPaddingTop(), pinGrid.getPaddingRight(), clearance);
             if (board.getPaddingBottom() != clearance) board.setPadding(board.getPaddingLeft(), board.getPaddingTop(), board.getPaddingRight(), clearance);
