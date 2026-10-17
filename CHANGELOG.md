@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Save downloadable MP4/WebM from webpage video metadata and HTML video/source elements before poster images. Keep offline media on failed retries and retain bounded downloads, atomic commits and cleanup.
+- Keep location labels on one line and let the native menu scroll when available height is limited.
+- Move pin actions into the three-dot menu with desktop's Edit pin, Remove pin, Copy link and Open original names. Keep mobile details/save/retry actions there too. Navigate pins and attachments by swiping, with keyboard/accessibility scroll actions retained.
+- Desktop pin editing/removal and pose extraction remain desktop-only under the receiver's existing browse/add permission. Published versions and v1 data/protocol contracts remain unchanged.
+
 ## 0.3.1 - 2026-10-17
 
 Changes since [v0.3.0](https://github.com/chelij/papan-android/releases/tag/v0.3.0): [full comparison](https://github.com/chelij/papan-android/compare/v0.3.0...v0.3.1) · [download the diff](https://github.com/chelij/papan-android/releases/download/v0.3.1/papan-android-v0.3.0-to-v0.3.1.diff).

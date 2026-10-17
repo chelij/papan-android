@@ -220,7 +220,7 @@ public final class MainActivity extends AppCompatActivity {
         actions = row(); actions.setPadding(dp(16), dp(8), dp(16), dp(16));
         CoordinatorLayout.LayoutParams actionParams = new CoordinatorLayout.LayoutParams(-1, -2); actionParams.gravity = Gravity.BOTTOM; screen.addView(actions, actionParams);
         appBar.addOnOffsetChangedListener((AppBarLayout.OnOffsetChangedListener)(bar, offset) -> syncBars(offset));
-        locationButton = new ExtendedFloatingActionButton(this); locationButton.setTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodyLarge); locationButton.setSingleLine(true); locationButton.setEllipsize(android.text.TextUtils.TruncateAt.END); locationButton.setMinHeight(dp(48)); locationButton.setMinimumHeight(dp(48)); locationButton.setInsetTop(dp(4)); locationButton.setInsetBottom(dp(4)); locationButton.setPaddingRelative(dp(12), dp(8), dp(12), dp(8)); locationButton.setIconSize(dp(20)); locationButton.setIconPadding(dp(8)); locationButton.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.papan_primary_container))); locationButton.setTextColor(getColor(R.color.papan_on_primary_container)); locationButton.setIconTint(ColorStateList.valueOf(getColor(R.color.papan_on_primary_container))); locationButton.setOnClickListener(v -> chooseLocation()); actions.addView(locationButton, new LinearLayout.LayoutParams(-2, -2));
+        locationButton = new ExtendedFloatingActionButton(this); locationButton.setTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodyLarge); locationButton.setAllCaps(false); locationButton.setSingleLine(true); locationButton.setHorizontallyScrolling(true); locationButton.setMaxLines(1); locationButton.setEllipsize(android.text.TextUtils.TruncateAt.END); locationButton.setMinHeight(dp(48)); locationButton.setMinimumHeight(dp(48)); locationButton.setInsetTop(dp(4)); locationButton.setInsetBottom(dp(4)); locationButton.setPaddingRelative(dp(12), dp(8), dp(12), dp(8)); locationButton.setIconSize(dp(20)); locationButton.setIconPadding(dp(8)); locationButton.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.papan_primary_container))); locationButton.setTextColor(getColor(R.color.papan_on_primary_container)); locationButton.setIconTint(ColorStateList.valueOf(getColor(R.color.papan_on_primary_container))); locationButton.setOnClickListener(v -> chooseLocation()); actions.addView(locationButton, new LinearLayout.LayoutParams(-2, -2));
         View flexible = new View(this); actions.addView(flexible, new LinearLayout.LayoutParams(dp(12), 0, 1));
         addLink = new FloatingActionButton(this); addLink.setSize(FloatingActionButton.SIZE_MINI); addLink.setEnsureMinTouchTargetSize(true); addLink.setMaxImageSize(dp(20)); addLink.setImageResource(R.drawable.add); addLink.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); addLink.setImageTintList(ColorStateList.valueOf(getColor(R.color.papan_on_primary))); addLink.setContentDescription("Add link"); addLink.setOnClickListener(v -> enterLink()); actions.addView(addLink, new LinearLayout.LayoutParams(-2, -2));
         View.OnFocusChangeListener revealActions = (view, focused) -> { if (focused) revealChrome(); };
@@ -234,7 +234,7 @@ public final class MainActivity extends AppCompatActivity {
         actions.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             syncBars(appBar.getTop());
             int width = 0; for (String label : LOCATION_LABELS) width = Math.max(width, (int)Math.ceil(locationButton.getPaint().measureText(label)));
-            width += locationButton.getPaddingStart() + locationButton.getPaddingEnd() + locationButton.getIconSize() + locationButton.getIconPadding();
+            width += locationButton.getPaddingStart() + locationButton.getPaddingEnd() + locationButton.getIconSize() + locationButton.getIconPadding() + dp(8);
             width = Math.min(width, Math.max(dp(48), right - left - actions.getPaddingLeft() - actions.getPaddingRight() - addLink.getMeasuredWidth() - dp(12)));
             if (locationButton.getMaxWidth() != width || locationButton.getMinWidth() != width) locationButton.setWidth(width);
             int clearance = bottom - top + dp(8);
@@ -263,9 +263,12 @@ public final class MainActivity extends AppCompatActivity {
     private ScrollView scrolling(LinearLayout body) { ScrollView scroll = new ScrollView(this); scroll.addView(body); return scroll; }
     private AlertDialog dialog(String title, LinearLayout body) { ScrollView scroll = new ScrollView(this); scroll.addView(body); AlertDialog value = new MaterialAlertDialogBuilder(this).setTitle(title).setView(scroll).setNegativeButton("Close", null).create(); value.show(); value.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE); return value; }
     private Dialog destinationSheet(LinearLayout body) {
+        return bottomSheet("Save link", body);
+    }
+    private Dialog bottomSheet(String heading, LinearLayout body) {
         BottomSheetDialog value = new BottomSheetDialog(this);
         LinearLayout content = column(); LinearLayout title = row(); title.setPadding(dp(24), dp(8), dp(16), dp(4));
-        TextView label = text("Save link", 24); title.addView(label, new LinearLayout.LayoutParams(0, -2, 1)); title.addView(button("Cancel", value::dismiss, false)); content.addView(title);
+        TextView label = text(heading, 24); title.addView(label, new LinearLayout.LayoutParams(0, -2, 1)); title.addView(button(heading.equals("Save link") ? "Cancel" : "Close", value::dismiss, false)); content.addView(title);
         ScrollView scroll = new ScrollView(this); scroll.addView(body); content.addView(scroll); value.setContentView(content);
         value.setOnShowListener(d -> { value.getBehavior().setState(BottomSheetBehavior.STATE_EXPANDED); value.getBehavior().setMaxHeight((int)(getResources().getDisplayMetrics().heightPixels * .9)); }); value.show(); return value;
     }
@@ -315,9 +318,10 @@ public final class MainActivity extends AppCompatActivity {
         android.text.TextPaint measure = new android.text.TextPaint(((TextView)anchor).getPaint()); int width = anchor.getWidth();
         for (String label : anchor == locationButton ? LOCATION_LABELS : labels) width = Math.max(width, (int)Math.ceil(measure.measureText(label)) + dp(icons == null ? 32 : 68));
         popup.setWidth(Math.min(Math.min(dp(320), getResources().getDisplayMetrics().widthPixels - dp(32)), width));
-        popup.setAdapter(new android.widget.ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels) {
+        android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels) {
             @Override public View getView(int position, View reusable, ViewGroup parent) {
                 TextView row = (TextView)super.getView(position, reusable, parent); row.setTextAppearance(MainActivity.this, com.google.android.material.R.style.TextAppearance_Material3_BodyLarge); row.setMinHeight(dp(48)); row.setPaddingRelative(dp(16), dp(12), dp(16), dp(12)); row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setSingleLine(true); row.setEllipsize(android.text.TextUtils.TruncateAt.END); row.setLayoutParams(new android.widget.AbsListView.LayoutParams(-1, -2));
                 row.setTextColor(position == selected ? getColor(R.color.papan_on_primary_container) : TEXT);
                 int resting = position == selected ? getColor(R.color.papan_primary_container) : Color.TRANSPARENT, focused = position == selected ? resting : getColor(R.color.papan_secondary_container);
                 android.graphics.drawable.StateListDrawable background = new android.graphics.drawable.StateListDrawable();
@@ -327,7 +331,12 @@ public final class MainActivity extends AppCompatActivity {
                 if (icon != null) { icon = icon.mutate(); icon.setTint(position == selected ? getColor(R.color.papan_on_primary_container) : MUTED); icon.setBounds(0, 0, dp(24), dp(24)); }
                 row.setCompoundDrawablesRelative(icon, null, null, null); row.setCompoundDrawablePadding(dp(12)); return row;
             }
-        });
+        }; popup.setAdapter(adapter);
+        if (anchor == locationButton) {
+            android.graphics.Rect visible = new android.graphics.Rect(); anchor.getWindowVisibleDisplayFrame(visible); int[] position = new int[2]; anchor.getLocationOnScreen(position);
+            int height = dp(16); for (int i = 0; i < labels.length; i++) { View row = adapter.getView(i, null, new android.widget.ListView(this)); row.measure(View.MeasureSpec.makeMeasureSpec(popup.getWidth(), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)); height += row.getMeasuredHeight(); }
+            popup.setHeight(Math.min(height, Math.max(dp(48), Math.min(dp(240), position[1] - visible.top - dp(8)))));
+        }
         popup.setOnItemClickListener((parent, view, position, id) -> { popup.dismiss(); choose.accept(position); }); popup.show();
         popup.getListView().setChoiceMode(selected < 0 ? android.widget.ListView.CHOICE_MODE_NONE : android.widget.ListView.CHOICE_MODE_SINGLE); if (selected >= 0) popup.getListView().setItemChecked(selected, true); popup.setSelection(Math.max(0, selected)); return popup;
     }
@@ -585,7 +594,15 @@ public final class MainActivity extends AppCompatActivity {
             if (!fromDesktop) { JSONObject item = cover(pin, false); if (item != null) { items.put(item); local = MobileLibrary.get(this).mediaFile(pin.optString("mediaFile")); } }
             if (items == null || items.length() == 0) items = new JSONArray().put(new JSONObject().put("kind", "text").put("text", pin.optString("text", pin.optString("notes"))));
             boolean restore = pin.optString("id").equals(viewerPinId);
-            PinViewer value = new PinViewer(this, pin, items, (item, thumbnail) -> imageFrame(pin, item, fromDesktop, false, thumbnail), fromDesktop ? desktop : null, local, () -> pinDetails(pin, fromDesktop), this::navigatePin, restore ? viewerItemId : null, restore ? viewerPosition : 0, !restore || viewerPlaying);
+            PinViewer value = new PinViewer(this, pin, items, (item, thumbnail) -> imageFrame(pin, item, fromDesktop, false, thumbnail), fromDesktop ? desktop : null, local, new PinViewer.Actions() {
+                public void populate(android.view.Menu menu) {
+                    menu.add(0, 201, 0, "Details");
+                    if (!fromDesktop) { menu.add(0, 202, 1, "Edit pin"); menu.add(0, 203, 2, "Remove pin"); }
+                    menu.add(0, 204, 3, "Copy link"); menu.add(0, 205, 4, "Open original"); menu.add(0, 206, 5, "Save to another collection");
+                    if (!fromDesktop) menu.add(0, 207, 6, "failed".equals(pin.optString("capture")) ? "Retry download" : "Refresh saved media");
+                }
+                public void select(int id) { pinAction(id, pin, fromDesktop); }
+            }, this::navigatePin, restore ? viewerItemId : null, restore ? viewerPosition : 0, !restore || viewerPlaying);
             if (fromDesktop && find(remoteCollections, selectedRemote) != null && find(remoteCollections, selectedRemote).optBoolean("protected")) value.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
             detailDialog = value; viewerPinId = null; value.setOnDismissListener(d -> { if (detailDialog != value) return; handler.removeCallbacks(detailPoll); if (detailInfo != null) detailInfo.dismiss(); detailDialog = null; if (foreground) viewerPinId = null; if (remote && foreground && !movingViewer) loadDesktop(false, false); }); value.show();
             if (fromDesktop) handler.postDelayed(detailPoll, 3000);
@@ -608,15 +625,27 @@ public final class MainActivity extends AppCompatActivity {
     private void pinDetails(JSONObject pin, boolean fromDesktop) {
         try {
             if (detailInfo != null) detailInfo.dismiss(); LinearLayout body = dialogBody(); body.addView(text(pin.optString("title"), 20));
-            if (!fromDesktop && !pin.optString("captureError").isEmpty()) { body.addView(text(pin.optString("captureError"), 14)); body.addView(button("Retry preview", () -> { try { MobileLibrary.get(this).retry(pin.getString("id")); if (detailDialog != null) detailDialog.dismiss(); capture(); } catch (Exception error) { message(error.getMessage()); } }, false)); }
+            if (!fromDesktop && !pin.optString("captureError").isEmpty()) body.addView(text(pin.optString("captureError"), 14));
             if (!pin.optString("notes").isEmpty()) body.addView(text(pin.optString("notes"), 16)); if (!pin.optString("text").isEmpty()) body.addView(text(pin.optString("text"), 16));
             if (fromDesktop && pin.optBoolean("textTruncated")) body.addView(text("Text preview shortened for your phone. Open the source for the full page.", 13));
             TextView source = text(pin.optString("sourceUrl"), 14); source.setTextIsSelectable(true); source.setTextColor(MUTED); body.addView(source);
-            body.addView(button("Open source", () -> { try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(LocalCapture.webLink(pin.optString("sourceUrl"))))); } catch (Exception error) { message("No app could open this link."); } }, true));
-            if (!fromDesktop) { body.addView(button("Edit title and notes", () -> editPin(pin), false)); body.addView(button("Save to another collection", () -> { if (detailDialog != null) detailDialog.dismiss(); chooseDestination(pin.optString("sourceUrl")); }, false)); body.addView(button("Delete from phone", () -> new MaterialAlertDialogBuilder(this).setTitle("Delete this phone pin?").setMessage("Its saved phone media will also be removed.").setNegativeButton("Keep", null).setPositiveButton("Delete", (d,w) -> { try { MobileLibrary.get(this).removePin(pin.getString("id")); if (detailDialog != null) detailDialog.dismiss(); refreshLocal(); } catch (Exception error) { message(error.getMessage()); } }).show(), false)); }
-            body.addView(button("Close details", () -> { if (detailInfo != null) detailInfo.dismiss(); }, false)); detailInfo = destinationSheet(body);
+            detailInfo = bottomSheet("Pin details", body);
             if (fromDesktop && find(remoteCollections, selectedRemote) != null && find(remoteCollections, selectedRemote).optBoolean("protected")) detailInfo.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         } catch (Exception error) { message(error.getMessage()); }
+    }
+    private void pinAction(int action, JSONObject pin, boolean fromDesktop) {
+        try {
+            switch (action) {
+                case 201: pinDetails(pin, fromDesktop); break;
+                case 202: if (!fromDesktop) editPin(pin); break;
+                case 203: if (!fromDesktop) new MaterialAlertDialogBuilder(this).setTitle("Remove this phone pin?").setMessage("Its saved phone media will also be removed.").setNegativeButton("Keep", null).setPositiveButton("Remove", (d,w) -> { try { MobileLibrary.get(this).removePin(pin.getString("id")); if (detailDialog != null) detailDialog.dismiss(); refreshLocal(); } catch (Exception error) { message(error.getMessage()); } }).show(); break;
+                case 204: ((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Papan link", pin.optString("sourceUrl"))); if (detailDialog != null) detailDialog.notice("Link copied."); break;
+                case 205: startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(LocalCapture.webLink(pin.optString("sourceUrl"))))); break;
+                case 206: if (detailDialog != null) detailDialog.dismiss(); chooseDestination(pin.optString("sourceUrl")); break;
+                case 207: if (!fromDesktop) { MobileLibrary.get(this).retry(pin.getString("id")); if (detailDialog != null) detailDialog.dismiss(); capture(); } break;
+                default: break;
+            }
+        } catch (Exception error) { if (detailDialog != null) detailDialog.notice(error.getMessage() == null ? "Could not complete this action." : error.getMessage()); else message(error.getMessage()); }
     }
     private void checkDetailAccess() {
         if (!foreground || !remote || detailDialog == null) return;
