@@ -713,6 +713,7 @@ public final class MainActivity extends AppCompatActivity {
             TextInputLayout layout = new TextInputLayout(this); layout.setBoxBackgroundMode(TextInputLayout.BOX_BACKGROUND_OUTLINE); layout.setHint("Collection");
             com.google.android.material.textfield.MaterialAutoCompleteTextView collection = new com.google.android.material.textfield.MaterialAutoCompleteTextView(layout.getContext());
             collection.setInputType(android.text.InputType.TYPE_NULL); collection.setKeyListener(null); collection.setSingleLine(true); collection.setTextSize(16); collection.setMinHeight(dp(56)); collection.setSimpleItems(names); collection.setText(names[selected], false);
+            collection.setPaddingRelative(title.getPaddingStart(), title.getPaddingTop(), title.getPaddingEnd(), title.getPaddingBottom());
             collection.setTag(layout); layout.addView(collection, new LinearLayout.LayoutParams(-1, -2)); layout.setEndIconMode(TextInputLayout.END_ICON_DROPDOWN_MENU); addField(body, collection);
             collection.setOnItemClickListener((parent, view, position, id) -> { try { chosen[0] = collections.getJSONObject(position).getString("id"); layout.setError(null); } catch (Exception error) { layout.setError(error.getMessage()); } });
             AlertDialog value = dialog("Edit phone pin", body);

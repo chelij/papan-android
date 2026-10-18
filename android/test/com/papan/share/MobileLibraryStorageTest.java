@@ -206,7 +206,7 @@ public final class MobileLibraryStorageTest extends Instrumentation {
             selectedStorage(store, context, database);
             moveStorage(store, context, database);
             require(new File(context.getFilesDir(), "mobile-media").list().length == 0, "Recapture cleanup left media behind.");
-            result.putString("stream", "Mobile storage checks passed: replacement, retained cache, failed commit, reopen, shared ownership, cleanup and HTTP recapture rollback/retry; seven direct/OG/Twitter/video/source/base/redirect/signed-URL video saves; failed-video retention/retry; invalid-scheme and oversized video poster fallback/cleanup; selected attachment deduplication, legacy pin upgrade and cover, atomic commit rollback, shared attachment ownership and cleanup.\n");
+            result.putString("stream", "Mobile storage checks passed: replacement, retained cache, failed commit, reopen, shared ownership, cleanup and HTTP recapture rollback/retry; seven direct/OG/Twitter/video/source/base/redirect/signed-URL video saves; failed-video retention/retry; invalid-scheme and oversized video poster fallback/cleanup; selected attachment deduplication, legacy pin upgrade and cover, atomic commit rollback, shared attachment ownership and cleanup; moving pins persists destination/title/notes while preserving identity/timestamps/media bytes, keeps existing destination pins, rejects missing destinations and failed commits without losing data, and cleans moved media only after its last owner is removed.\n");
             finish(Activity.RESULT_OK, result);
         } catch (Throwable error) {
             result.putString("stream", "Mobile storage check failed: " + android.util.Log.getStackTraceString(error));
