@@ -101,7 +101,7 @@ public final class MainActivity extends AppCompatActivity {
     private boolean viewerPlaying, movingViewer;
     private int viewerAdvance;
     private String viewerAdvanceFrom;
-    private boolean remote, foreground, resumed, settingsOpen, activityOpen;
+    private boolean remote, foreground, resumed, boardMenuOpen, settingsOpen, activityOpen;
     private String selectedLocal = "", selectedRemote = "", pendingLink, sharedId;
     private String pairingDraft = "", addressDraft = "";
     private JSONArray remoteCollections = new JSONArray(), remotePins = new JSONArray();
@@ -141,6 +141,7 @@ public final class MainActivity extends AppCompatActivity {
     @Override public void onStart() { super.onStart(); foreground = true; pollUntil = SystemClock.elapsedRealtime() + 30000; sync(); capture(); if (remote) loadDesktop(false, true); else if (!activityOpen) refreshLocal(); }
     @Override public void onWindowFocusChanged(boolean focused) {
         super.onWindowFocusChanged(focused);
+        if (focused) boardMenuOpen = false;
         syncBoardVideos();
         if (!focused && snackbar != null) snackbar.dismiss();
         if (focused && foreground && messagePending) showBoardMessage();
@@ -211,6 +212,11 @@ public final class MainActivity extends AppCompatActivity {
                 default: return false;
             }
             return true;
+        });
+        toolbar.addMenuProvider(new androidx.core.view.MenuProvider() {
+            @Override public void onCreateMenu(android.view.Menu menu, android.view.MenuInflater inflater) {}
+            @Override public boolean onMenuItemSelected(android.view.MenuItem item) { return false; }
+            @Override public void onPrepareMenu(android.view.Menu menu) { boardMenuOpen = true; syncBoardVideos(); }
         });
         LinearLayout content = column(); CoordinatorLayout.LayoutParams contentParams = new CoordinatorLayout.LayoutParams(-1, -1); contentParams.setBehavior(new AppBarLayout.ScrollingViewBehavior()); screen.addView(content, contentParams);
         heading = text("", 14); heading.setTextColor(MUTED); heading.setPadding(dp(16), dp(8), dp(16), dp(8)); heading.setVisibility(View.GONE); content.addView(heading);
@@ -325,7 +331,9 @@ public final class MainActivity extends AppCompatActivity {
         collectionMenu = picker(collectionButton, labels, null, selected, position -> { JSONObject value = choices.optJSONObject(position); if (value == null) return; search.setText(""); if (remote) { selectedRemote = value.optString("id"); loadDesktop(true, true); } else { selectedLocal = value.optString("id"); refreshLocal(); } });
     }
     private ListPopupWindow picker(View anchor, String[] labels, int[] icons, int selected, java.util.function.IntConsumer choose) {
+        boardMenuOpen = true; syncBoardVideos();
         ListPopupWindow popup = new ListPopupWindow(this); popup.setAnchorView(anchor); popup.setModal(true); popup.setInputMethodMode(ListPopupWindow.INPUT_METHOD_NOT_NEEDED);
+        popup.setOnDismissListener(() -> { boardMenuOpen = false; syncBoardVideos(); });
         if (anchor == locationButton) { popup.setVerticalOffset(-dp(8)); popup.setAnimationStyle(0); popup.setEpicenterBounds(new android.graphics.Rect(0, -dp(8), anchor.getWidth(), -dp(8))); }
         android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels) {
             @Override public View getView(int position, View reusable, ViewGroup parent) {
@@ -469,7 +477,7 @@ public final class MainActivity extends AppCompatActivity {
         for (int i = 0; i < pinGrid.getChildCount(); i++) {
             RecyclerView.ViewHolder holder = pinGrid.getChildViewHolder(pinGrid.getChildAt(i)); if (!(holder instanceof CardHolder)) continue;
             VideoPreview video = ((CardHolder)holder).video; if (video == null) continue;
-            android.graphics.Rect bounds = new android.graphics.Rect(); video.setActive(visible && video.getGlobalVisibleRect(bounds) && android.graphics.Rect.intersects(viewport, bounds), hasWindowFocus());
+            android.graphics.Rect bounds = new android.graphics.Rect(); video.setActive(visible && video.getGlobalVisibleRect(bounds) && android.graphics.Rect.intersects(viewport, bounds), hasWindowFocus() && !boardMenuOpen);
         }
     }
     private void renderPins() {
