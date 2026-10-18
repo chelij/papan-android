@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Pause board videos at their current frame when a location, collection or toolbar menu opens, and resume the same player when it closes. Keep decoder cleanup for offscreen pins, the full-screen viewer, backgrounding and collection locks.
+- Choose another Phone collection in Edit pin. Save the destination, title and notes together while preserving the pin identity and downloaded media; cancelling leaves it in place.
 - Save downloadable MP4/WebM from webpage video metadata and HTML video/source elements before poster images. Keep offline media on failed retries and retain bounded downloads, atomic commits and cleanup.
 - Keep location labels on one line and let the native menu scroll when available height is limited.
 - Move pin actions into the three-dot menu with desktop's Edit pin, Remove pin, Copy link and Open original names. Keep mobile details/save/retry actions there too. Navigate pins and attachments by swiping, with keyboard/accessibility scroll actions retained.

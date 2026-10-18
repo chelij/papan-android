@@ -25,9 +25,11 @@ try {
   await writeFile(path.join(out, 'instrumentation.txt'), log);
   assert.match(log, /INSTRUMENTATION_RESULT: status=passed/, log);
   const displayId = Number(log.match(/displayId=(\d+)/)?.[1]); assert.ok(displayId > 0);
-  const frame = spawnSync(adb, ['-s', serial, 'exec-out', 'run-as', pkg, 'cat', 'files/pin-actions.png'], { maxBuffer: 16 * 1024 * 1024, timeout: 10000 });
-  assert.equal(frame.status, 0, String(frame.stderr)); assert.equal(frame.stdout.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
-  await writeFile(path.join(out, 'pin-actions.png'), frame.stdout);
+  for (const name of ['pin-actions.png', 'edit-collection.png']) {
+    const frame = spawnSync(adb, ['-s', serial, 'exec-out', 'run-as', pkg, 'cat', `files/${name}`], { maxBuffer: 16 * 1024 * 1024, timeout: 10000 });
+    assert.equal(frame.status, 0, String(frame.stderr)); assert.equal(frame.stdout.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+    await writeFile(path.join(out, name), frame.stdout);
+  }
   const report = { status: 'passed', apkSha256, device: serial, displayId, physicalPhoneUsed: false, checks: log.match(/checks=(.*)/)?.[1] };
   await writeFile(path.join(out, 'report.json'), JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify(report, null, 2));
 } finally {

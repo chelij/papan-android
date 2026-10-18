@@ -52,6 +52,27 @@ public final class MobileLibraryStorageTest extends Instrumentation {
         store.removeCollection(collection);
         for (int i = 0; i < items.length(); i++) require(!store.mediaFile(items.getJSONObject(i).getString("mediaFile")).exists(), "Attachment cleanup left an unreferenced file.");
     }
+    private static void moveStorage(MobileLibrary store, Context context, File database) throws Exception {
+        String source = store.create("Move source"), target = store.create("Move target"), id = store.add(source, "https://example.com/move");
+        File media = store.mediaFile(id + ".png"); byte[] bytes = image(android.graphics.Color.GREEN); Files.write(media.toPath(), bytes);
+        store.captured(id, new JSONObject().put("kind", "image").put("mediaFile", media.getName()).put("capture", "saved"));
+        JSONObject original = pin(store, id); String duplicate = store.add(target, original.getString("sourceUrl"));
+        byte[] previous = Files.readAllBytes(database.toPath()); boolean rejected = false;
+        try { store.edit(id, "missing", "Moved title", "Moved notes"); } catch (Exception expected) { rejected = true; }
+        require(rejected && original.toString().equals(pin(store, id).toString()) && Arrays.equals(previous, Files.readAllBytes(database.toPath())), "Invalid move changed a pin or its library.");
+        File blocked = new File(database + ".new"), marker = new File(blocked, "fixture"); require(blocked.mkdir() && marker.createNewFile(), "Could not block move commit.");
+        boolean failed = false;
+        try { store.edit(id, target, "Moved title", "Moved notes"); } catch (Exception expected) { failed = true; } finally { marker.delete(); blocked.delete(); }
+        require(failed && original.toString().equals(pin(store, id).toString()) && Arrays.equals(previous, Files.readAllBytes(database.toPath())) && Arrays.equals(bytes, Files.readAllBytes(media.toPath())), "Failed move lost pin state or media.");
+        store.edit(id, target, "Moved title", "Moved notes");
+        java.lang.reflect.Constructor<MobileLibrary> constructor = MobileLibrary.class.getDeclaredConstructor(Context.class); constructor.setAccessible(true);
+        JSONObject moved = pin(constructor.newInstance(context), id);
+        require(store.snapshot().getJSONArray("pins").length() == 2 && duplicate.equals(pin(store, duplicate).getString("id")), "Moving merged or removed an existing destination pin.");
+        require(target.equals(moved.getString("collectionId")) && "Moved title".equals(moved.getString("title")) && "Moved notes".equals(moved.getString("notes")), "Reopening lost the edited destination/title/notes.");
+        for (String key : new String[] {"id", "sourceUrl", "createdAt", "mediaFile", "kind", "capture"}) require(original.get(key).equals(moved.get(key)), "Moving changed " + key);
+        store.removeCollection(source); require(media.isFile() && Arrays.equals(bytes, Files.readAllBytes(media.toPath())), "Removing the old collection deleted moved media.");
+        store.removeCollection(target); require(!media.exists(), "Removing the destination retained unused moved media.");
+    }
     private static void captureRollback(MobileLibrary store, Context context, File database) throws Exception {
         byte[] original = image(android.graphics.Color.RED), replacement = image(android.graphics.Color.BLUE);
         try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
@@ -183,6 +204,7 @@ public final class MobileLibraryStorageTest extends Instrumentation {
             captureRollback(store, context, database);
             captureVideos(store, context);
             selectedStorage(store, context, database);
+            moveStorage(store, context, database);
             require(new File(context.getFilesDir(), "mobile-media").list().length == 0, "Recapture cleanup left media behind.");
             result.putString("stream", "Mobile storage checks passed: replacement, retained cache, failed commit, reopen, shared ownership, cleanup and HTTP recapture rollback/retry; seven direct/OG/Twitter/video/source/base/redirect/signed-URL video saves; failed-video retention/retry; invalid-scheme and oversized video poster fallback/cleanup; selected attachment deduplication, legacy pin upgrade and cover, atomic commit rollback, shared attachment ownership and cleanup.\n");
             finish(Activity.RESULT_OK, result);

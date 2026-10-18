@@ -36,6 +36,10 @@ Android keeps one active desktop pairing. **Pair desktop** can reconnect the exi
 
 Camera frames are decoded locally and never saved or uploaded. Clipboard access happens only when you tap Paste. Sharing uses ordinary HTTP on a trusted local network; the phone stores its key and queue in app-private files with Android backup disabled. [Detailed transport and collection-protection limits](https://github.com/chelij/papan/blob/main/docs/mobile-sharing.md#privacy-and-protection).
 
+Opening a location, collection or toolbar menu pauses board videos at their current frame. Closing the menu resumes the same player. Leaving the board or putting Papan in the background releases its players.
+
+To move a Phone pin, open its three-dot menu, choose **Edit pin**, change **Collection**, then choose **Save changes**. Papan opens the destination collection and retains the pin's downloaded media, title and notes. Close the form to cancel. Desktop pin editing remains in the desktop app.
+
 ## Build
 
 Install Node.js 24.15+, Python 3.10+, JDK 17+, and Android SDK **platform 35 / build-tools 35.0.0**. Set `JAVA_HOME` and `ANDROID_HOME`, then:

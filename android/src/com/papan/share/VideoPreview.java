@@ -16,7 +16,7 @@ final class VideoPreview extends TextureView implements TextureView.SurfaceTextu
     private final String url;
     private final boolean crop;
     private MediaPlayer player;
-    private boolean active, prepared, failed;
+    private boolean active, playing, prepared, failed;
     private int position, mediaWidth, mediaHeight;
     private final Runnable prepareTimeout = () -> { if (player != null && !prepared) fail(); };
 
@@ -26,13 +26,18 @@ final class VideoPreview extends TextureView implements TextureView.SurfaceTextu
         super(context); this.file = file; this.desktop = desktop; this.url = url; this.crop = crop;
         setOpaque(false); setAlpha(0); setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO); setSurfaceTextureListener(this);
     }
-    void setActive(boolean value) { if (value && !active) failed = false; active = value; if (active) start(); else release(); }
+    void setActive(boolean value) { setActive(value, value); }
+    void setActive(boolean value, boolean play) {
+        if (value && !active) failed = false; active = value; playing = play;
+        if (!active) release();
+        else { start(); if (prepared) { if (playing) player.start(); else if (player.isPlaying()) player.pause(); } }
+    }
     private void start() {
         if (player != null || failed || !active || !isAvailable() || desktop == null && (file == null || !file.isFile())) return;
         try {
             MediaPlayer next = new MediaPlayer(); player = next;
             next.setVolume(0, 0); next.setLooping(true);
-            next.setOnPreparedListener(ready -> { if (player != ready) return; removeCallbacks(prepareTimeout); prepared = true; mediaWidth = ready.getVideoWidth(); mediaHeight = ready.getVideoHeight(); fit(); if (position > 0) ready.seekTo(position); if (active) ready.start(); });
+            next.setOnPreparedListener(ready -> { if (player != ready) return; removeCallbacks(prepareTimeout); prepared = true; mediaWidth = ready.getVideoWidth(); mediaHeight = ready.getVideoHeight(); fit(); if (position > 0) ready.seekTo(position); if (active && playing) ready.start(); });
             next.setOnVideoSizeChangedListener((ready, width, height) -> { if (player == ready) { mediaWidth = width; mediaHeight = height; fit(); } });
             next.setOnInfoListener((ready, what, extra) -> { if (player == ready && what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) setAlpha(1); return false; });
             next.setOnErrorListener((ready, what, extra) -> { if (player == ready) fail(); return true; });

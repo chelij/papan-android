@@ -197,6 +197,7 @@ public final class MobileFlowTest extends Instrumentation {
             awaitBoardVideos(); VideoPreview playing = boardVideos().get(0);
             await(() -> videoPosition(playing) > 2000, 8000, "Local board video did not advance."); await(() -> videoPosition(playing) >= 0 && videoPosition(playing) < 1000, 5000, "Local board video did not loop.");
             onMain(() -> { Bitmap frame = playing.getBitmap(); require(frame != null && android.graphics.Color.red(frame.getPixel(frame.getWidth() / 2, frame.getHeight() / 2)) > 180, "Board preview did not render decoded video pixels."); frame.recycle(); });
+            boardMenuPause("phone");
             onMain(() -> { try { RecyclerView board = (RecyclerView)field(main, "pinGrid"); board.scrollBy(0, board.getHeight() * 2); } catch (Exception error) { throw new RuntimeException(error); } });
             await(() -> field(playing, "player") == null, 5000, "Offscreen board video retained its decoder."); awaitBoardVideos();
             onMain(() -> { try { ((RecyclerView)field(main, "pinGrid")).scrollToPosition(0); } catch (Exception error) { throw new RuntimeException(error); } }); await(() -> grid().findFirstVisibleItemPosition() == 0, 5000, "Portrait board did not return to its first row."); awaitBoardVideos();
@@ -232,6 +233,39 @@ public final class MobileFlowTest extends Instrumentation {
     private boolean videoReleased(VideoPreview view) { try { return field(view, "player") == null; } catch (Exception error) { throw new RuntimeException(error); } }
     private int videoPosition(VideoPreview view) { int[] position = {-1}; onMain(() -> { try { android.media.MediaPlayer player = (android.media.MediaPlayer)field(view, "player"); if (player != null && (Boolean)field(view, "prepared") && player.isPlaying()) { require(player.isLooping(), "Board video is not looping."); position[0] = player.getCurrentPosition(); } } catch (Exception error) { throw new RuntimeException(error); } }); return position[0]; }
     private void awaitBoardVideos() throws Exception { await(() -> { java.util.List<VideoPreview> videos = boardVideos(); onMain(() -> videos.removeIf(view -> !view.getGlobalVisibleRect(new android.graphics.Rect()))); return !videos.isEmpty() && videos.stream().allMatch(view -> videoPosition(view) >= 0 && view.getAlpha() == 1); }, 15000, "Visible board videos did not autoplay."); }
+    private void boardMenuPause(String source) throws Exception {
+        for (String menu : new String[] {"locationMenu", "collectionMenu", "toolbar"}) {
+            awaitBoardVideos(); VideoPreview preview = boardVideos().get(0);
+            android.media.MediaPlayer player = (android.media.MediaPlayer)field(preview, "player");
+            await(() -> { int position = videoPosition(preview); return position > player.getDuration() / 3 && position < player.getDuration() * 2 / 3; }, 8000, "Preview did not advance before opening " + menu);
+            int before = videoPosition(preview);
+            onMain(() -> { try {
+                if (menu.equals("toolbar")) ((com.google.android.material.appbar.MaterialToolbar)field(main, "toolbar")).showOverflowMenu();
+                else ((View)field(main, menu.equals("locationMenu") ? "locationButton" : "collectionButton")).performClick();
+            } catch (Exception error) { throw new RuntimeException(error); } });
+            await(() -> !main.hasWindowFocus(), 5000, menu + " did not take focus."); SystemClock.sleep(120);
+            int[] stopped = {-1}; Bitmap[] frozen = {null};
+            onMain(() -> { try {
+                require(field(preview, "player") == player && (Boolean)field(preview, "prepared") && preview.getAlpha() == 1, menu + " discarded the playing frame for its still thumbnail.");
+                require(!player.isPlaying(), menu + " did not pause the preview."); stopped[0] = player.getCurrentPosition();
+                require(before > 0 && Math.abs(stopped[0] - before) < 250, menu + " reset the preview position."); frozen[0] = preview.getBitmap(); require(frozen[0] != null, "Paused preview has no decoded frame.");
+            } catch (Exception error) { throw new RuntimeException(error); } });
+            try {
+                SystemClock.sleep(600);
+                onMain(() -> { try {
+                    require(field(preview, "player") == player && !player.isPlaying() && Math.abs(player.getCurrentPosition() - stopped[0]) < 40, menu + " changed the paused position.");
+                    Bitmap frame = preview.getBitmap(); require(frame != null && frozen[0].sameAs(frame), menu + " changed the paused frame."); frame.recycle();
+                } catch (Exception error) { throw new RuntimeException(error); } });
+                if (menu.equals("toolbar")) screenshot(main, source + "-menu-paused.png");
+            } finally { if (frozen[0] != null) frozen[0].recycle(); }
+            onMain(() -> { try {
+                if (menu.equals("toolbar")) ((com.google.android.material.appbar.MaterialToolbar)field(main, "toolbar")).dismissPopupMenus();
+                else ((androidx.appcompat.widget.ListPopupWindow)field(main, menu)).dismiss();
+            } catch (Exception error) { throw new RuntimeException(error); } });
+            await(main::hasWindowFocus, 5000, menu + " did not dismiss.");
+            await(() -> field(preview, "player") == player && videoPosition(preview) >= 0 && videoPosition(preview) != stopped[0], 5000, "Dismissing " + menu + " did not resume the same preview.");
+        }
+    }
     private void mediaOnly() {
         Bundle result = new Bundle();
         try {
@@ -423,11 +457,37 @@ public final class MobileFlowTest extends Instrumentation {
                 onMain(() -> { try { PinViewer viewer = (PinViewer)field(main, "detailDialog"); require(viewer.isShowing() && viewer.getWindow().getDecorView().hasWindowFocus(), "Copy did not dismiss the native popup and return focus to the viewer."); } catch (Exception error) { throw new RuntimeException(error); } });
                 click(main, "Details"); await(() -> has("Pin details"), 3000, "Details sheet did not open after copying."); click(main, "Close");
             }
+            String destination = store.create("Move destination"); JSONObject original = store.snapshot().getJSONArray("pins").getJSONObject(0);
+            click(main, "Edit pin"); chooseEditCollection("Move destination"); click(main, "Close");
+            require(collection.equals(store.snapshot().getJSONArray("pins").getJSONObject(0).getString("collectionId")), "Cancelling Edit moved the pin.");
+            click(main, "Edit pin"); input("Title", "Moved reference"); input("Notes", "Kept while moving"); chooseEditCollection("Move destination"); click(main, "Save changes");
+            await(() -> main.hasWindowFocus() && destination.equals(field(main, "selectedLocal")) && description(main.getWindow().getDecorView(), "Open pin: Moved reference") != null, 5000, "Edit did not move the pin and open its destination.");
+            JSONObject moved = store.snapshot().getJSONArray("pins").getJSONObject(0);
+            require(store.snapshot().getJSONArray("pins").length() == 1 && id.equals(moved.getString("id")) && original.getLong("createdAt") == moved.getLong("createdAt") && "Kept while moving".equals(moved.getString("notes")), "Moving duplicated the pin or lost its identity/notes.");
+            onMain(() -> description(main.getWindow().getDecorView(), "Open pin: Moved reference").performClick());
             click(main, "Save to another collection"); linkOnly(); await(() -> has("Save link"), 3000, "Save sheet did not open after closing the viewer."); click(main, "Cancel"); await(main::hasWindowFocus, 3000, "Save cancellation did not return to the board.");
-            onMain(() -> description(main.getWindow().getDecorView(), "Open pin: Menu reference").performClick()); click(main, "Remove pin"); click(main, "Keep"); click(main, "Close reference"); result.putString("checks", "Three consecutive copy/details/close sequences wait for native popup removal and retain viewer focus; save-to-collection/cancel, remove cancellation and close work on a private display."); result.putString("status", "passed");
+            onMain(() -> description(main.getWindow().getDecorView(), "Open pin: Moved reference").performClick()); click(main, "Remove pin"); click(main, "Keep"); click(main, "Close reference");
+            relaunch(600, 1400, 2); onMain(() -> description(main.getWindow().getDecorView(), "Open pin: Moved reference").performClick()); click(main, "Edit pin"); chooseEditCollection("Menu check");
+            onMain(() -> { View window = findWindow("Edit phone pin").getRootView(); View save = find(window, "Save changes"); save.requestRectangleOnScreen(new android.graphics.Rect(0, 0, save.getWidth(), save.getHeight())); });
+            await(() -> findWindow("Save changes") != null && findWindow("Save changes").getGlobalVisibleRect(new android.graphics.Rect()), 3000, "Edit save button is unavailable at narrow width/200% text.");
+            onMain(() -> { View window = findWindow("Edit phone pin").getRootView(); Bitmap frame = Bitmap.createBitmap(window.getWidth(), window.getHeight(), Bitmap.Config.ARGB_8888); window.draw(new android.graphics.Canvas(frame)); try (FileOutputStream file = new FileOutputStream(new File(main.getFilesDir(), "edit-collection.png"))) { frame.compress(Bitmap.CompressFormat.PNG, 100, file); } catch (Exception error) { throw new RuntimeException(error); } finally { frame.recycle(); } });
+            click(main, "Close"); click(main, "Close reference"); result.putString("checks", "Three consecutive copy/details/close sequences retain viewer focus; Edit collection dropdown cancel/save preserves one pin's identity/notes, opens its chosen collection, and stays usable at narrow width/200% text. Save-to-collection/cancel, remove cancellation and close still work on a private display."); result.putString("status", "passed");
         } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); }
         finally { onMain(() -> { if (main != null && !main.isDestroyed()) main.finishAndRemoveTask(); }); waitForIdleSync(); if (display != null) display.release(); if (output != null) output.close(); }
         finish("passed".equals(result.getString("status")) ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
+    }
+    private void chooseEditCollection(String name) throws Exception {
+        onMain(() -> { View window = findWindow("Edit phone pin"); require(window != null, "Edit dialog is unavailable.");
+            com.google.android.material.textfield.MaterialAutoCompleteTextView input = (com.google.android.material.textfield.MaterialAutoCompleteTextView)inputView(window.getRootView(), "Collection");
+            require(input != null && input.getKeyListener() == null, "Collection must use a native noneditable dropdown."); input.requestFocus(); input.showDropDown();
+        });
+        boolean[] selected = {false};
+        await(() -> { onMain(() -> {
+            for (View window : WindowInspector.getGlobalWindowViews()) if (window.isShown() && window.getDisplay() != null && window.getDisplay().getDisplayId() == displayId) {
+                android.widget.ListView list = pickerList(window); if (list == null) continue; View row = find(list, name); if (row == null) continue;
+                int position = list.getPositionForView(row); require(position >= 0, "Collection choice has no native row."); list.performItemClick(row, position, list.getItemIdAtPosition(position)); selected[0] = true; return;
+            }
+        }); return selected[0]; }, 5000, "Collection dropdown did not offer " + name);
     }
     private Bitmap displayFrame(Image frame) {
         Image.Plane plane = frame.getPlanes()[0]; int width = plane.getRowStride() / plane.getPixelStride(); Bitmap padded = Bitmap.createBitmap(width, frame.getHeight(), Bitmap.Config.ARGB_8888); java.nio.ByteBuffer pixels = plane.getBuffer(); pixels.rewind(); padded.copyPixelsFromBuffer(pixels); Bitmap bitmap = Bitmap.createBitmap(padded, 0, 0, frame.getWidth(), frame.getHeight()); if (bitmap != padded) padded.recycle(); return bitmap;
@@ -932,8 +992,12 @@ public final class MobileFlowTest extends Instrumentation {
         java.util.Set<String> phoneMedia = new java.util.HashSet<>(java.util.Arrays.asList(new File(main.getFilesDir(), "mobile-media").list()));
         awaitBoardVideos(); VideoPreview streamed = boardVideos().get(0); require(((String)field(streamed, "url")).endsWith("variant=preview"), "Board streamed original media instead of the available preview.");
         int[] streamDuration = new int[1]; onMain(() -> { try { streamDuration[0] = ((android.media.MediaPlayer)field(streamed, "player")).getDuration(); } catch (Exception error) { throw new RuntimeException(error); } }); require(streamDuration[0] > 0, "Desktop stream has no duration.");
-        await(() -> videoPosition(streamed) > streamDuration[0] * 3 / 4, 8000, "Desktop preview stream did not advance."); await(() -> videoPosition(streamed) >= 0 && videoPosition(streamed) < streamDuration[0] / 4, 5000, "Desktop preview stream did not loop.");
+        await(() -> videoPosition(streamed) > streamDuration[0] * 3 / 4, 8000, "Desktop preview stream did not advance.");
+        java.util.List<Integer> loopPositions = new java.util.ArrayList<>();
+        try { await(() -> { int position = videoPosition(streamed); loopPositions.add(position); return position >= 0 && position < streamDuration[0] / 4; }, 5000, "Desktop preview stream did not loop."); }
+        catch (AssertionError error) { throw new AssertionError(error.getMessage() + " duration=" + streamDuration[0] + " positions=" + loopPositions + " active=" + field(streamed, "active") + " prepared=" + field(streamed, "prepared") + " failed=" + field(streamed, "failed") + " attached=" + streamed.isAttachedToWindow() + " currentCard=" + boardVideos().contains(streamed) + " focus=" + main.hasWindowFocus() + " resumed=" + field(main, "resumed")); }
         onMain(() -> { Bitmap frame = streamed.getBitmap(); require(frame != null && android.graphics.Color.red(frame.getPixel(frame.getWidth() / 2, frame.getHeight() / 2)) > 180, "Desktop board did not render streamed video pixels."); frame.recycle(); }); screenshot(main, "remote-board-autoplay.png");
+        boardMenuPause("remote");
         onMain(() -> { try { ((Handler)field(main, "handler")).removeCallbacks((Runnable)field(main, "browsePoll")); Field generation = MainActivity.class.getDeclaredField("boardGeneration"); generation.setAccessible(true); generation.setInt(main, generation.getInt(main) + 1); } catch (Exception error) { throw new RuntimeException(error); } });
         JSONObject unavailable = ((org.json.JSONArray)field(main, "remotePins")).getJSONObject(0).getJSONArray("items").getJSONObject(0); String availableUrl = unavailable.getString("previewUrl");
         onMain(() -> { try { unavailable.put("previewUrl", availableUrl.replace("/items/" + unavailable.getString("id") + "/", "/items/00000000-0000-0000-0000-000000000000/")); Method render = MainActivity.class.getDeclaredMethod("renderPins"); render.setAccessible(true); render.invoke(main); } catch (Exception error) { throw new RuntimeException(error); } });
