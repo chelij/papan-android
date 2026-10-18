@@ -41,7 +41,7 @@ try {
   const log = await new Promise((resolve, reject) => { const child = spawn(adb, args); let output = ''; child.stdout.on('data', data => output += data); child.stderr.on('data', data => output += data); child.on('error', reject); child.on('exit', code => code === 0 ? resolve(output) : reject(new Error(output))); });
   await writeFile(path.join(out, 'instrumentation.txt'), log);
   const passed = /INSTRUMENTATION_RESULT: status=passed/.test(log);
-  const captures = frames ? ['phone-portrait-board.png', 'phone-portrait-large-text.png', 'phone-mixed-filtered.png', 'phone-mixed-board.png'] : ['media-choice.png', 'media-selected.png', 'selected-video-offline.png', ...(process.env.PAPAN_LIVE_MEDIA_URL ? ['live-media.json'] : [])];
+  const captures = frames ? ['phone-portrait-board.png', 'phone-portrait-large-text.png', 'phone-mixed-filtered.png', 'phone-mixed-board.png', 'phone-menu-paused.png'] : ['media-choice.png', 'media-selected.png', 'selected-video-offline.png', ...(process.env.PAPAN_LIVE_MEDIA_URL ? ['live-media.json'] : [])];
   for (const name of [...captures, ...(!passed ? ['failure.png'] : [])]) {
     const r = spawnSync(adb, ['-s', serial, 'exec-out', 'run-as', pkg, 'cat', `files/${name}`], { maxBuffer: 16 * 1024 * 1024 });
     if (!passed && (r.status !== 0 || !r.stdout.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')))) continue; assert.equal(r.status, 0, String(r.stderr)); await writeFile(path.join(out, name), r.stdout);

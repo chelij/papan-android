@@ -97,10 +97,13 @@ public final class MobileLibrary {
         pins.put(new JSONObject().put("id", id).put("collectionId", collectionId).put("sourceUrl", url).put("title", title.substring(0, Math.min(200, title.length()))).put("notes", "").put("createdAt", System.currentTimeMillis()).put("engine", inspection.getString("engine")).put("items", items).put("capture", "pending"));
         commit(next); return id;
     }
-    public synchronized void edit(String id, String title, String notes) throws Exception {
+    public synchronized void edit(String id, String collectionId, String title, String notes) throws Exception {
         title = title.trim(); if (title.isEmpty() || title.length() > 200 || notes.length() > 10000) throw new Exception("Use a title of up to 200 characters and notes of up to 10,000.");
-        JSONObject next = snapshot(); JSONArray pins = next.getJSONArray("pins");
-        for (int i = 0; i < pins.length(); i++) if (pins.getJSONObject(i).getString("id").equals(id)) { pins.getJSONObject(i).put("title", title).put("notes", notes).put("edited", true); commit(next); return; }
+        JSONObject next = snapshot(); requireCollection(next, collectionId); JSONArray pins = next.getJSONArray("pins");
+        for (int i = 0; i < pins.length(); i++) if (pins.getJSONObject(i).getString("id").equals(id)) {
+            JSONObject pin = pins.getJSONObject(i);
+            pin.put("collectionId", collectionId).put("title", title).put("notes", notes).put("edited", true); commit(next); return;
+        }
         throw new Exception("This pin no longer exists.");
     }
     public synchronized void retry(String id) throws Exception { captured(id, new JSONObject().put("capture", "pending").put("captureError", "")); }

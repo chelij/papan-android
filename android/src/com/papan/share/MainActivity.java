@@ -101,7 +101,7 @@ public final class MainActivity extends AppCompatActivity {
     private boolean viewerPlaying, movingViewer;
     private int viewerAdvance;
     private String viewerAdvanceFrom;
-    private boolean remote, foreground, settingsOpen, activityOpen;
+    private boolean remote, foreground, resumed, settingsOpen, activityOpen;
     private String selectedLocal = "", selectedRemote = "", pendingLink, sharedId;
     private String pairingDraft = "", addressDraft = "";
     private JSONArray remoteCollections = new JSONArray(), remotePins = new JSONArray();
@@ -145,8 +145,8 @@ public final class MainActivity extends AppCompatActivity {
         if (!focused && snackbar != null) snackbar.dismiss();
         if (focused && foreground && messagePending) showBoardMessage();
     }
-    @Override public void onPause() { stopBoardVideos(); super.onPause(); }
-    @Override public void onResume() { super.onResume(); if (pinGrid != null) pinGrid.post(this::syncBoardVideos); }
+    @Override public void onPause() { resumed = false; stopBoardVideos(); super.onPause(); }
+    @Override public void onResume() { super.onResume(); resumed = true; if (pinGrid != null) pinGrid.post(this::syncBoardVideos); }
     @Override public void onStop() {
         appearance.edit().putString("selectedLocal", selectedLocal).putString("selectedRemote", selectedRemote).apply();
         foreground = false; handler.removeCallbacks(poll); handler.removeCallbacks(browsePoll); handler.removeCallbacks(detailPoll); handler.removeCallbacks(searchPoll); boardGeneration++;
@@ -465,11 +465,11 @@ public final class MainActivity extends AppCompatActivity {
     private void stopBoardVideos() { if (pinGrid != null) for (int i = 0; i < pinGrid.getChildCount(); i++) { RecyclerView.ViewHolder holder = pinGrid.getChildViewHolder(pinGrid.getChildAt(i)); if (holder instanceof CardHolder && ((CardHolder)holder).video != null) ((CardHolder)holder).video.setActive(false); } }
     private void syncBoardVideos() {
         if (pinGrid == null) return;
-        android.graphics.Rect viewport = new android.graphics.Rect(); boolean play = foreground && !activityOpen && detailDialog == null && hasWindowFocus() && pinGrid.isShown() && pinGrid.getGlobalVisibleRect(viewport);
+        android.graphics.Rect viewport = new android.graphics.Rect(); boolean visible = foreground && resumed && !activityOpen && detailDialog == null && pinGrid.isShown() && pinGrid.getGlobalVisibleRect(viewport);
         for (int i = 0; i < pinGrid.getChildCount(); i++) {
             RecyclerView.ViewHolder holder = pinGrid.getChildViewHolder(pinGrid.getChildAt(i)); if (!(holder instanceof CardHolder)) continue;
             VideoPreview video = ((CardHolder)holder).video; if (video == null) continue;
-            android.graphics.Rect bounds = new android.graphics.Rect(); video.setActive(play && video.getGlobalVisibleRect(bounds) && android.graphics.Rect.intersects(viewport, bounds));
+            android.graphics.Rect bounds = new android.graphics.Rect(); video.setActive(visible && video.getGlobalVisibleRect(bounds) && android.graphics.Rect.intersects(viewport, bounds), hasWindowFocus());
         }
     }
     private void renderPins() {
@@ -704,7 +704,27 @@ public final class MainActivity extends AppCompatActivity {
         requests.execute(() -> { boolean permitted = false; try { JSONObject collection = find(desktop.collections(), id); permitted = collection != null && !collection.optBoolean("locked"); } catch (Exception ignored) {} final boolean allowed = permitted;
             runOnUiThread(() -> { if (isDestroyed() || showing != detailDialog) return; if (!allowed) { retainRemoteImages(new JSONArray()); remotePins = new JSONArray(); showing.dismiss(); message("Desktop access ended. Unlock or reconnect to continue."); } else handler.postDelayed(detailPoll, 3000); }); });
     }
-    private void editPin(JSONObject pin) { LinearLayout body = dialogBody(); EditText title = field("Title", false), notes = field("Notes", true); title.setText(pin.optString("title")); notes.setText(pin.optString("notes")); addField(body, title); addField(body, notes); AlertDialog value = dialog("Edit phone pin", body); Button save = button("Save changes", () -> { try { MobileLibrary.get(this).edit(pin.getString("id"), title.getText().toString(), notes.getText().toString()); value.dismiss(); if (detailDialog != null) detailDialog.dismiss(); refreshLocal(); } catch (Exception error) { error(title, error.getMessage()); } }, true); body.addView(save); }
+    private void editPin(JSONObject pin) {
+        try {
+            LinearLayout body = dialogBody(); EditText title = field("Title", false), notes = field("Notes", true);
+            title.setText(pin.optString("title")); notes.setText(pin.optString("notes")); addField(body, title); addField(body, notes);
+            JSONArray collections = MobileLibrary.get(this).snapshot().getJSONArray("collections"); String[] names = new String[collections.length()]; String[] chosen = {pin.getString("collectionId")}; int selected = 0;
+            for (int i = 0; i < collections.length(); i++) { JSONObject collection = collections.getJSONObject(i); names[i] = collection.getString("name"); if (chosen[0].equals(collection.getString("id"))) selected = i; }
+            TextInputLayout layout = new TextInputLayout(this); layout.setBoxBackgroundMode(TextInputLayout.BOX_BACKGROUND_OUTLINE); layout.setHint("Collection");
+            com.google.android.material.textfield.MaterialAutoCompleteTextView collection = new com.google.android.material.textfield.MaterialAutoCompleteTextView(layout.getContext());
+            collection.setInputType(android.text.InputType.TYPE_NULL); collection.setKeyListener(null); collection.setSingleLine(true); collection.setTextSize(16); collection.setMinHeight(dp(56)); collection.setSimpleItems(names); collection.setText(names[selected], false);
+            collection.setTag(layout); layout.addView(collection, new LinearLayout.LayoutParams(-1, -2)); layout.setEndIconMode(TextInputLayout.END_ICON_DROPDOWN_MENU); addField(body, collection);
+            collection.setOnItemClickListener((parent, view, position, id) -> { try { chosen[0] = collections.getJSONObject(position).getString("id"); layout.setError(null); } catch (Exception error) { layout.setError(error.getMessage()); } });
+            AlertDialog value = dialog("Edit phone pin", body);
+            body.addView(button("Save changes", () -> {
+                if (title.getText().toString().trim().isEmpty()) { error(title, "Enter a title."); return; }
+                try {
+                    MobileLibrary.get(this).edit(pin.getString("id"), chosen[0], title.getText().toString(), notes.getText().toString()); value.dismiss(); if (detailDialog != null) detailDialog.dismiss();
+                    boolean moved = !selectedLocal.equals(chosen[0]); selectedLocal = chosen[0]; if (moved) search.setText(""); refreshLocal();
+                } catch (Exception error) { layout.setError(error.getMessage()); }
+            }, true));
+        } catch (Exception error) { message(error.getMessage()); }
+    }
     private void connections() {
         settingsOpen = true; LinearLayout body = dialogBody(); body.addView(text("Enable Receive from phone on your computer. Pair desktop finds it nearby; approve the matching code there. Paired desktops reconnect automatically.", 15));
         connectionFeedback = text("", 14); connectionFeedback.setVisibility(View.GONE); connectionFeedback.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE); body.addView(connectionFeedback);
