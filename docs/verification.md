@@ -1,5 +1,22 @@
 # Mobile boards verification
 
+## v0.3.2 release
+
+Android **0.3.2/code 6** packages the selected-media downloads, native menu sizing/actions, portrait Phone frames, local/authenticated Desktop autoplay, preview pause and Edit collection changes from #7–#11. The release candidate uses the existing maintainer certificate, SHA-256 `427cd50690d9a1f00bf0df21e4305d81ec347400d42fba3d1fde7f7e61ba1bec`. Package, Gradle and compiled manifest versions agree. Phone-library/queue/receiver v1 remain compatible; optional selected-media fields retain legacy covers. Desktop browsing requires 0.3.3+ with existing browse/add consent. Desktop runtime remains 0.3.4/`871805a`; ComfyUI contracts and runtime are unchanged.
+
+Local source, 13 URL tests, nine HTTP cases and both signed builds pass. Both release variants share all **53** production application classes with the previously checked `18b0b58` update. The normal APK's **875** production DEX/resource entries and **39** native/Python runtime assets are byte-identical to that update; **11** pinned Python source packages and worker hashes verify. All **57** embedded source/build files match the candidate checkout. Only version metadata and the version-aware media-test APK path change in embedded sources; no application/runtime code changes after the native checks.
+
+The preceding API 36 checks retain their exact scope: Phone frames/playback on private display 12, pin menus/Edit on display 15 and the full real receiver workflow on display 17 with three saves. These prove actual selected downloads/offline viewing, portrait proportions, local/authenticated streamed decoded frames, same-player/nonzero-position/frozen-frame menu pause/resume, Edit move/rollback, protected sessions/rotation/lock, manual order, responsive design and synchronized bars. The earlier native extraction check downloaded and decoded the reported public Instagram reel. Exact source/runtime equality permits this evidence to be reused for release packaging; it does not create a new physical release-pair test.
+
+The release test APK also passes a fresh **headless Android 16/API 36** upgrade on owned `emulator-5570`: install version 5, seed two private collections and a selected-media pin/image, update in place to version 6, then compare the exact library/media bytes, app ID, private directory and first-install timestamp. All remain unchanged. The current native storage suite then passes retained media, atomic failures/retry, legacy selected-media upgrade, ownership cleanup and Edit destination/title/notes persistence/rollback. This check launches no activity. The owned emulator/profile is removed; the original AVD and host X11 connection are preserved.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Normal `Papan-Android-0.3.2.apk` | `baee43bdcf9a3669702d695d348dd039afc837aec6b3eeefdf9273f74cafbefc` |
+| Isolated `Papan-Android-0.3.2-test.apk` (not distributed) | `60eab2bfa86de3b3d7c7e61244182d4cf0060679f56360d3adcf23e197680f84` |
+
+Publication, tag/source and public-byte verification follow in [release task #12](https://github.com/chelij/papan-android/issues/12), coordinated in [desktop #12](https://github.com/chelij/papan/issues/12). Evidence: `artifacts/release-v0.3.2/{integrity,upgrade,emulator-cleanup}.json`, `storage.log` and the dated native evidence above. Virtual checks do not establish physical Wi-Fi throughput, phone decoder/battery performance, other native ABIs/Android versions, optical QR or screen-reader/soft-keyboard behavior. Source availability, sign-in/DRM and the 32 MiB per-file limit remain. Phone access is backup/install/package verification only.
+
 ## Menu preview pause and Edit collection (18 October 2026)
 
 Android source `18b0b58` (unreleased 0.3.1/code 5) separates visible preview eligibility from temporary window focus. Location and collection pickers pause before native popup construction; the toolbar uses the existing native menu-preparation callback to pause before display. All three menus retain the existing muted/looping player and decoded frame/position; dismissal resumes it. Offscreen, viewer, collection, background and lock transitions still release playback. Activity resume state prevents focus callbacks from allocating players after pause.

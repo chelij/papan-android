@@ -30,7 +30,8 @@ const server = createServer((req, res) => {
   res.setHeader('Content-Type', 'image/png'); res.end(poster);
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const url = `http://10.0.2.2:${server.address().port}/gallery`, apk = path.resolve('dist/Papan-Android-0.3.1-test.apk');
+const version = JSON.parse(await readFile('package.json', 'utf8')).version;
+const url = `http://10.0.2.2:${server.address().port}/gallery`, apk = path.resolve(`dist/Papan-Android-${version}-test.apk`);
 let installed = false;
 try {
   run('install', '-r', apk); installed = true;
