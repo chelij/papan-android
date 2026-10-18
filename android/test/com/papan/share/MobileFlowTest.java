@@ -164,7 +164,7 @@ public final class MobileFlowTest extends Instrumentation {
             if (!cameraOnly) result.putString("checks", result.getString("checks") + " Real desktop-board swipes hide bottom controls on downward scrolling and restore them upward; refresh retains the hidden state and reference; reversal and keyboard recovery pass.");
             if (!cameraOnly) result.putString("checks", result.getString("checks") + " Native top bar quick-return reclaims its full height for previews; both bars retain their hidden state across refresh and restore through collection/Add keyboard focus.");
             if (!cameraOnly) result.putString("checks", result.getString("checks") + " Shared top/bottom progress stays synchronized at every sampled native frame during remote hide/show, with intermediate motion and no independent bottom animation.");
-            if (!cameraOnly) result.putString("checks", result.getString("checks") + " Desktop board videos autoplay/loop from authenticated preview streams with decoded texture pixels and thumbnail fallback on 404; offscreen, collection/viewer/background and lock transitions release decoders; return/rotation retains protected access and resumes streaming. Streaming leaves Phone media files unchanged.");
+            if (!cameraOnly) result.putString("checks", result.getString("checks") + " Desktop board videos autoplay/loop from authenticated preview streams with decoded texture pixels and thumbnail fallback on 404; offscreen, collection/viewer/background and lock transitions release decoders; return/rotation retains protected access and resumes streaming. Streaming leaves Phone media files unchanged. Location, collection and toolbar menus keep the same native player, nonzero paused position and identical decoded frame, then resume that player on dismissal.");
             result.putString("status", "passed");
         } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); if (main != null) try { screenshot(main, "failure.png"); result.putString("screenStatus", ((TextView)field(main, "status")).getText().toString()); result.putString("visibleText", text(main)); result.putBoolean("paired", PhoneStore.get(main).snapshot().has("config")); } catch (Exception ignored) {} }
         finally {
@@ -221,7 +221,7 @@ public final class MobileFlowTest extends Instrumentation {
             awaitFrameRatio(changed, "Replacing a local file retained stale frame proportions.");
             onMain(() -> { try { ((EditText)field(main, "search")).setText(""); } catch (Exception error) { throw new RuntimeException(error); } }); alignedBoard(); screenshot(main, "phone-mixed-board.png");
             awaitBoardVideos(); java.util.List<VideoPreview> cropped = boardVideos(); onMain(() -> { for (VideoPreview videoView : cropped) { android.graphics.RectF bounds = new android.graphics.RectF(0, 0, videoView.getWidth(), videoView.getHeight()); videoView.getTransform(new android.graphics.Matrix()).mapRect(bounds); require(bounds.width() >= videoView.getWidth() - 1 && bounds.height() >= videoView.getHeight() - 1 && Math.abs(bounds.width() / bounds.height() - 90.0 / 160) < .01, "Video crop stretched or left empty space in the frame."); } });
-            result.putString("checks", "Native saved portrait video/image tiles use 90:160 frames with aligned touching rows and crop-to-fill; rebound previews reuse decoded bitmaps; narrow/200% text and reopening retain proportions; complete collection averaging includes offscreen attachments despite search; replaced files invalidate dimensions. Visible saved board videos advance/loop and render decoded pixels, fit/crop without stretching, release decoders offscreen and behind the viewer/background, and resume on return. No physical phone used."); result.putString("status", "passed");
+            result.putString("checks", "Native saved portrait video/image tiles use 90:160 frames with aligned touching rows and crop-to-fill; rebound previews reuse decoded bitmaps; narrow/200% text and reopening retain proportions; complete collection averaging includes offscreen attachments despite search; replaced files invalidate dimensions. Visible saved board videos advance/loop and render decoded pixels, fit/crop without stretching, release decoders offscreen and behind the viewer/background, and resume on return. Location, collection and toolbar menus retain the same player, nonzero paused position and identical decoded frame, then resume the same player on dismissal. No physical phone used."); result.putString("status", "passed");
         } catch (Throwable error) { result.putString("status", "failed"); result.putString("error", android.util.Log.getStackTraceString(error)); if (main != null) try { screenshot(main, "failure.png"); } catch (Exception ignored) {} }
         finally { onMain(() -> { if (main != null && !main.isDestroyed()) main.finishAndRemoveTask(); }); waitForIdleSync(); if (display != null) display.release(); if (output != null) output.close(); }
         finish("passed".equals(result.getString("status")) ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
@@ -238,8 +238,9 @@ public final class MobileFlowTest extends Instrumentation {
             awaitBoardVideos(); VideoPreview preview = boardVideos().get(0);
             android.media.MediaPlayer player = (android.media.MediaPlayer)field(preview, "player");
             await(() -> { int position = videoPosition(preview); return position > player.getDuration() / 3 && position < player.getDuration() * 2 / 3; }, 8000, "Preview did not advance before opening " + menu);
-            int before = videoPosition(preview);
+            int[] before = {-1}; long[] opened = {0};
             onMain(() -> { try {
+                before[0] = player.getCurrentPosition(); opened[0] = SystemClock.elapsedRealtime();
                 if (menu.equals("toolbar")) ((com.google.android.material.appbar.MaterialToolbar)field(main, "toolbar")).showOverflowMenu();
                 else ((View)field(main, menu.equals("locationMenu") ? "locationButton" : "collectionButton")).performClick();
             } catch (Exception error) { throw new RuntimeException(error); } });
@@ -248,7 +249,7 @@ public final class MobileFlowTest extends Instrumentation {
             onMain(() -> { try {
                 require(field(preview, "player") == player && (Boolean)field(preview, "prepared") && preview.getAlpha() == 1, menu + " discarded the playing frame for its still thumbnail.");
                 require(!player.isPlaying(), menu + " did not pause the preview."); stopped[0] = player.getCurrentPosition();
-                require(before > 0 && Math.abs(stopped[0] - before) < 250, menu + " reset the preview position."); frozen[0] = preview.getBitmap(); require(frozen[0] != null, "Paused preview has no decoded frame.");
+                require(before[0] > 0 && Math.abs(stopped[0] - before[0]) < 250, menu + " reset the preview position: before=" + before[0] + " stopped=" + stopped[0] + " elapsed=" + (SystemClock.elapsedRealtime() - opened[0]) + " duration=" + player.getDuration()); frozen[0] = preview.getBitmap(); require(frozen[0] != null, "Paused preview has no decoded frame.");
             } catch (Exception error) { throw new RuntimeException(error); } });
             try {
                 SystemClock.sleep(600);
@@ -479,7 +480,8 @@ public final class MobileFlowTest extends Instrumentation {
     private void chooseEditCollection(String name) throws Exception {
         onMain(() -> { View window = findWindow("Edit phone pin"); require(window != null, "Edit dialog is unavailable.");
             com.google.android.material.textfield.MaterialAutoCompleteTextView input = (com.google.android.material.textfield.MaterialAutoCompleteTextView)inputView(window.getRootView(), "Collection");
-            require(input != null && input.getKeyListener() == null, "Collection must use a native noneditable dropdown."); input.requestFocus(); input.showDropDown();
+            require(input != null && input.getKeyListener() == null, "Collection must use a native noneditable dropdown.");
+            require(input.getPaddingStart() > 0 && input.getPaddingStart() == inputView(window.getRootView(), "Title").getPaddingStart(), "Collection text does not align with the other edit fields."); input.requestFocus(); input.showDropDown();
         });
         boolean[] selected = {false};
         await(() -> { onMain(() -> {
