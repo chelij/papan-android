@@ -1,8 +1,8 @@
 # Mobile design delivery gate
 
-**PASS: Desktop stream autoplay, 18 October 2026.** Android source `75cb42c` adds muted/looping visible-board playback from authenticated desktop preview streams. Exact API 36 native checks pass on private display 11: decoded stream pixels, advancing/looping playback, thumbnail fallback and bounded preparation cleanup, offscreen/collection/viewer/background release and return, protected sessions/rotation and active board lock teardown. Phone media files stay unchanged. Local portrait/playback passes on display 19; the full desktop workflow retains three saves, order, password, menus, themes, captions and shared bars. Signed variants share 52 identical application classes, 57 exact source files and 39 unchanged runtime assets. See [verification](verification.md#desktop-board-stream-autoplay-18-october-2026) and `artifacts/desktop-stream-autoplay/` for byte integrity, installation state and limits.
+**PASS: menu pause and Edit collection, 18 October 2026.** Source `18b0b58` retains the current decoded video frame under the three native board menus and resumes the same player when they close. The Edit collection dropdown uses the existing Material library and Papan theme. Native Phone/display 12, Edit/display 15, storage and full Desktop/display 17 checks pass, including narrow/200% text and three real saves. See [verification](verification.md#menu-preview-pause-and-edit-collection-18-october-2026) and `artifacts/menu-preview-pause/` for exact bytes, installation and limits.
 
-The gate reuses prior popup/media-selector evidence for unchanged controls and byte-identical extraction/storage/viewer/cache sources. Current native board and complete workflow checks cover the changed playback and both location types. ENERGY 1 / RHYTHM 1 / MOTION 2 remains the accepted direction: requested media playback and synchronized bar movement supply functional motion.
+The accepted direction remains ENERGY 1 / RHYTHM 1 / MOTION 2. Pausing motion under navigation keeps attention on the menu; moving a pin changes its collection through an existing edit form. Palette, typography, preview layout and other controls remain unchanged and retain the preceding gate's evidence. The full native workflow retains light/dark/theme/caption/layout checks; the new native field inherits Material color/focus/accessibility roles.
 
 This report covers the changed mobile interface. Native Material components provide the platform interaction patterns; Papan supplies its identity and content. A physical screen-reader/soft-keyboard session is still a device follow-up, not a claimed result.
 
@@ -10,7 +10,7 @@ This report covers the changed mobile interface. Native Material components prov
 | --- | --- |
 | R-01 | PASS: desktop-style continuous fading separates media from readable captions; the design note records the phone contrast adjustment. No solid caption block or decorative gradient/glow. |
 | R-02 | PASS: changed UI copy contains no em dashes. |
-| R-03 | PASS: portrait and mixed Phone frames remain aligned and edge-to-edge, including narrow/200% text; full workflow checks 300/360/640dp layouts. Existing distinct/wider popup row and short-menu evidence is retained for unchanged picker code. |
+| R-03 | PASS: the new native edit form and collection choice remain usable at narrow width/200% text, including scrolling Save into view. Existing board/frame/menu responsive checks pass. |
 | R-04 | PASS: licensed Material phone, desktop, history, search, add, close and play vectors identify real actions; the dropdown arrow comes from the existing Material library. Protected collections retain explicit text status. No new assets/dependencies. |
 | R-05 | PASS: the app-bar collection picker, media board, floating location/Add row, native menus, sheets and details serve distinct purposes. No marketing template. |
 | R-06 | PASS: native scalable sans-serif follows Android guidance and desktop's sans-serif identity. |
@@ -26,14 +26,14 @@ This report covers the changed mobile interface. Native Material components prov
 | R-16 | PASS: no AI marketing claims or buzzwords. |
 | R-17 | PASS: no invented statistics; documented bounds and test counts come from source/test output. |
 | R-18 | PASS: no testimonials or fictional people. |
-| R-19 | PASS: requested local and desktop videos autoplay muted/looping while visible; native checks prove decoder/stream release offscreen, behind the viewer, on collection lock and in background, with return resuming. Native bars retain synchronized functional movement under MOTION 2. |
+| R-19 | PASS: local and streamed previews freeze their decoded frame/position under location, collection and toolbar menus and resume the same player on dismissal. Offscreen/viewer/background/lock transitions release resources. Functional motion remains MOTION 2. |
 | R-20 | PASS: notebook surfaces, desktop green, Papan wordmark, centered collection dropdown and touching aligned previews form the requested compact identity. |
 | R-21 | PASS: working Use phone setting/Light/Dark controls persist the choice and recreate the native Activity. |
 | R-22 | PASS: no generated illustrations. |
 | R-23 | PASS: the user chose mymind styling and Explore-style viewing with Papan alignment/sizing. Existing Papan identity, licensed Material vectors and credited public-domain artwork fixtures are used; no identity imagery is generated. |
 | R-24 | PASS: location choice, current-button dismissal and selection pass. Native pin overflow opens actual implemented actions, while unsupported desktop editing/removal/pose actions stay on desktop under existing consent. |
 | R-25 | PASS: declared native light/dark text/action/selection roles and rendered selected-card contrast exceed 4.5:1; full native workflow retains the measured white-media caption fade contrast. See contrast.json and the existing caption evidence. |
-| R-26 | PASS: media cards, Choose collection, Cancel, link-only/desktop delivery and 503 → Retry recovery work through native controls. Actual files, offline decoding, shared-bar behavior and three receiver saves pass. |
+| R-26 | PASS: native Edit collection dropdown cancel/save preserves or moves the same pin and opens its destination; storage checks cover persistence, invalid destinations and failed writes. Existing menu actions remain functional. |
 | R-27 | PASS: native loading/error/retry and pending/failed/saved states retain existing actions. An unavailable stream shows its cached still preview; bounded preparation releases a stuck player and returning to the tile allows retry. |
 | R-28 | PASS: no generic FAQ. |
 | R-29 | PASS: neutral notebook surfaces and one desktop green action accent define light/dark palettes; muted secondary navigation supports selection. |
@@ -42,7 +42,7 @@ This report covers the changed mobile interface. Native Material components prov
 | R-32 | PASS: native card/checkable descriptions, focus and scalable labels remain. Enlarged-text chooser actions scroll fully into view; full keyboard/menu checks and alternate viewer navigation pass. Physical screen-reader coverage is not claimed. |
 | R-33 | PASS: Java/XML directly implement the interface; the build compiles that source without UI rewriting scripts. |
 | R-34 | PASS: Light/Dark/System controls, fresh theme initialization, restored selected collection/size, and readable toolbar icons pass native checks. |
-| R-35 | PASS: final API 36 native Desktop stream suite/private display 11 and local frame/playback suite/19 pass, including decoded TextureView pixels, advancing/looping playback, HTTP failure fallback/timeout, decoder teardown/return, protected rotation/lock and unchanged Phone files. Full workflow retains three saves, captions, responsive/theme/menu and bar behavior. Signed variants share 52 common application classes/57 sources/39 runtime assets; integrity and installation state are recorded. |
+| R-35 | PASS: native Phone/display 12, pin menu/Edit/15, storage and complete paired Desktop/17 checks pass. Baseline reproduces the frame reset. Signed variants share 53 application classes/57 source files/39 unchanged runtime assets; byte/install evidence is recorded. |
 | R-36 | PASS: trusted-LAN HTTP and capture limits are disclosed. No certification or performance claims. |
 | R-37 | PASS: accepted mymind/Explore references, aligned gap-free frames, compact dropdowns/green highlights and the explicit synchronized top/bottom motion request define the direction. The design note and task record retain 1/1/2 before implementation. |
 | R-38 | PASS: normal APKs contain no seeded library or artwork. The optional native artwork check uses the existing credited desktop cache only in the disposable test package. |
