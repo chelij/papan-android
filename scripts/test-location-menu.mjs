@@ -23,13 +23,15 @@ try {
   run('install', '-r', apk); installed = true;
   const log = run('shell', 'am', 'instrument', '-w', '-r', '-e', 'locationOnly', 'true', `${pkg}/com.papan.share.MobileFlowTest`);
   await writeFile(path.join(out, 'instrumentation.txt'), log);
-  assert.match(log, /INSTRUMENTATION_RESULT: status=passed/, log);
-  for (const name of ['menu-motion-before.png', 'menu-motion-first.png', 'menu-motion-last.png', 'menu-motion.json', 'location-phone-menu.png', 'location-desktop-menu.png', 'location-activity-menu.png']) {
+  const passed = /INSTRUMENTATION_RESULT: status=passed/.test(log);
+  for (const name of ['menu-motion-before.png', 'menu-motion-first.png', 'menu-motion-last.png', 'menu-motion.json', 'location-phone-menu.png', 'location-desktop-menu.png', 'location-activity-menu.png', 'location-desktop-button.png']) {
     const result = spawnSync(adb, ['-s', serial, 'exec-out', 'run-as', pkg, 'cat', `files/${name}`], { timeout: 10000, maxBuffer: 16 * 1024 * 1024 });
+    if (!passed && (result.status !== 0 || name.endsWith('.png') && result.stdout.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a' || name.endsWith('.json') && !result.stdout.toString().trim().startsWith('{'))) continue;
     assert.equal(result.status, 0, String(result.stderr));
     if (name.endsWith('.png')) assert.equal(result.stdout.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
     await writeFile(path.join(out, name), result.stdout);
   }
+  assert.ok(passed, log);
   const motion = JSON.parse(await readFile(path.join(out, 'menu-motion.json'), 'utf8'));
   assert.ok(motion.status === 'passed' && motion.displayId > 0 && motion.buttonUncovered);
   const report = { status: 'passed', apkSha256, device: serial, physicalPhoneUsed: false, motion, checks: log.match(/INSTRUMENTATION_RESULT: checks=(.*)/)?.[1] };

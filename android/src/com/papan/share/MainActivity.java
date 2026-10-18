@@ -91,6 +91,7 @@ public final class MainActivity extends AppCompatActivity {
     private boolean messagePending;
     private EditText search, pairLink, desktopAddress;
     private Dialog saveDialog;
+    private MediaChooser mediaChooser;
     private AlertDialog connectionsDialog, appearanceDialog, nearbyDialog;
     private PinViewer detailDialog;
     private Dialog detailInfo;
@@ -100,7 +101,7 @@ public final class MainActivity extends AppCompatActivity {
     private boolean viewerPlaying, movingViewer;
     private int viewerAdvance;
     private String viewerAdvanceFrom;
-    private boolean remote, foreground, settingsOpen, activityOpen;
+    private boolean remote, foreground, resumed, boardMenuOpen, settingsOpen, activityOpen;
     private String selectedLocal = "", selectedRemote = "", pendingLink, sharedId;
     private String pairingDraft = "", addressDraft = "";
     private JSONArray remoteCollections = new JSONArray(), remotePins = new JSONArray();
@@ -140,15 +141,20 @@ public final class MainActivity extends AppCompatActivity {
     @Override public void onStart() { super.onStart(); foreground = true; pollUntil = SystemClock.elapsedRealtime() + 30000; sync(); capture(); if (remote) loadDesktop(false, true); else if (!activityOpen) refreshLocal(); }
     @Override public void onWindowFocusChanged(boolean focused) {
         super.onWindowFocusChanged(focused);
+        if (focused) boardMenuOpen = false;
+        syncBoardVideos();
         if (!focused && snackbar != null) snackbar.dismiss();
         if (focused && foreground && messagePending) showBoardMessage();
     }
+    @Override public void onPause() { resumed = false; stopBoardVideos(); super.onPause(); }
+    @Override public void onResume() { super.onResume(); resumed = true; if (pinGrid != null) pinGrid.post(this::syncBoardVideos); }
     @Override public void onStop() {
         appearance.edit().putString("selectedLocal", selectedLocal).putString("selectedRemote", selectedRemote).apply();
         foreground = false; handler.removeCallbacks(poll); handler.removeCallbacks(browsePoll); handler.removeCallbacks(detailPoll); handler.removeCallbacks(searchPoll); boardGeneration++;
         rememberViewer(); if (detailDialog != null) detailDialog.dismiss(); if (detailInfo != null) detailInfo.dismiss();
         if (appearanceDialog != null) appearanceDialog.dismiss();
         if (nearbyDialog != null) nearbyDialog.dismiss();
+        if (mediaChooser != null) mediaChooser.dismiss();
         if (collectionMenu != null) collectionMenu.dismiss(); if (locationMenu != null) locationMenu.dismiss();
         remotePins = new JSONArray(); for (int i = 0; i < remoteCollections.length(); i++) { JSONObject value = remoteCollections.optJSONObject(i); if (value != null && value.optBoolean("protected")) try { value.put("locked", true); } catch (Exception ignored) {} }
         if (remote) { clearBoard(); board.addView(text("Desktop contents hidden while Papan is in the background.", 16)); }
@@ -207,6 +213,11 @@ public final class MainActivity extends AppCompatActivity {
             }
             return true;
         });
+        toolbar.addMenuProvider(new androidx.core.view.MenuProvider() {
+            @Override public void onCreateMenu(android.view.Menu menu, android.view.MenuInflater inflater) {}
+            @Override public boolean onMenuItemSelected(android.view.MenuItem item) { return false; }
+            @Override public void onPrepareMenu(android.view.Menu menu) { boardMenuOpen = true; syncBoardVideos(); }
+        });
         LinearLayout content = column(); CoordinatorLayout.LayoutParams contentParams = new CoordinatorLayout.LayoutParams(-1, -1); contentParams.setBehavior(new AppBarLayout.ScrollingViewBehavior()); screen.addView(content, contentParams);
         heading = text("", 14); heading.setTextColor(MUTED); heading.setPadding(dp(16), dp(8), dp(16), dp(8)); heading.setVisibility(View.GONE); content.addView(heading);
         search = field("Search this collection", false); search.setContentDescription("Search this collection"); search.setFilters(new android.text.InputFilter[] { new android.text.InputFilter.LengthFilter(500) }); searchLayout = fieldLayout(search);
@@ -217,10 +228,19 @@ public final class MainActivity extends AppCompatActivity {
         boardScroll = new NestedScrollView(this); boardScroll.setFillViewport(true); board = column(); board.setPadding(dp(16), dp(4), dp(16), dp(80)); boardScroll.addView(board); canvas.addView(boardScroll, new FrameLayout.LayoutParams(-1, -1));
         pinGrid = new RecyclerView(this); pinGrid.setPadding(0, dp(4), 0, dp(80)); pinGrid.setClipToPadding(false); pinGrid.setHasFixedSize(true); pinGrid.setItemAnimator(null); pinGrid.setVisibility(View.GONE); canvas.addView(pinGrid, new FrameLayout.LayoutParams(-1, -1));
         pinGrid.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> { if (right - left != oldRight - oldLeft && pinGrid.getAdapter() != null) pinGrid.post(this::renderPins); });
+        pinGrid.addOnScrollListener(new RecyclerView.OnScrollListener() { @Override public void onScrolled(RecyclerView view, int dx, int dy) { syncBoardVideos(); } });
+        pinGrid.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> syncBoardVideos());
         actions = row(); actions.setPadding(dp(16), dp(8), dp(16), dp(16));
         CoordinatorLayout.LayoutParams actionParams = new CoordinatorLayout.LayoutParams(-1, -2); actionParams.gravity = Gravity.BOTTOM; screen.addView(actions, actionParams);
         appBar.addOnOffsetChangedListener((AppBarLayout.OnOffsetChangedListener)(bar, offset) -> syncBars(offset));
-        locationButton = new ExtendedFloatingActionButton(this); locationButton.setTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodyLarge); locationButton.setSingleLine(true); locationButton.setEllipsize(android.text.TextUtils.TruncateAt.END); locationButton.setMinHeight(dp(48)); locationButton.setMinimumHeight(dp(48)); locationButton.setInsetTop(dp(4)); locationButton.setInsetBottom(dp(4)); locationButton.setPaddingRelative(dp(12), dp(8), dp(12), dp(8)); locationButton.setIconSize(dp(20)); locationButton.setIconPadding(dp(8)); locationButton.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.papan_primary_container))); locationButton.setTextColor(getColor(R.color.papan_on_primary_container)); locationButton.setIconTint(ColorStateList.valueOf(getColor(R.color.papan_on_primary_container))); locationButton.setOnClickListener(v -> chooseLocation()); actions.addView(locationButton, new LinearLayout.LayoutParams(-2, -2));
+        locationButton = new ExtendedFloatingActionButton(this) {
+            @Override protected void onMeasure(int widthSpec, int heightSpec) {
+                int textWidth = 0; for (String label : LOCATION_LABELS) textWidth = Math.max(textWidth, (int)Math.ceil(android.text.Layout.getDesiredWidth(label, getPaint())));
+                int minimum = Math.max(dp(48), textWidth + getCompoundPaddingLeft() + getCompoundPaddingRight());
+                if (getMinWidth() != minimum) setMinWidth(minimum);
+                super.onMeasure(widthSpec, heightSpec);
+            }
+        }; locationButton.setTextAppearance(this, com.google.android.material.R.style.TextAppearance_Material3_BodyLarge); locationButton.setAllCaps(false); locationButton.setSingleLine(true); locationButton.setHorizontallyScrolling(true); locationButton.setMaxLines(1); locationButton.setEllipsize(android.text.TextUtils.TruncateAt.END); locationButton.setMinHeight(dp(48)); locationButton.setMinimumHeight(dp(48)); locationButton.setInsetTop(dp(4)); locationButton.setInsetBottom(dp(4)); locationButton.setPaddingRelative(dp(12), dp(8), dp(12), dp(8)); locationButton.setIconSize(dp(20)); locationButton.setIconPadding(dp(8)); locationButton.setBackgroundTintList(ColorStateList.valueOf(getColor(R.color.papan_primary_container))); locationButton.setTextColor(getColor(R.color.papan_on_primary_container)); locationButton.setIconTint(ColorStateList.valueOf(getColor(R.color.papan_on_primary_container))); locationButton.setOnClickListener(v -> chooseLocation()); actions.addView(locationButton, new LinearLayout.LayoutParams(-2, -2));
         View flexible = new View(this); actions.addView(flexible, new LinearLayout.LayoutParams(dp(12), 0, 1));
         addLink = new FloatingActionButton(this); addLink.setSize(FloatingActionButton.SIZE_MINI); addLink.setEnsureMinTouchTargetSize(true); addLink.setMaxImageSize(dp(20)); addLink.setImageResource(R.drawable.add); addLink.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); addLink.setImageTintList(ColorStateList.valueOf(getColor(R.color.papan_on_primary))); addLink.setContentDescription("Add link"); addLink.setOnClickListener(v -> enterLink()); actions.addView(addLink, new LinearLayout.LayoutParams(-2, -2));
         View.OnFocusChangeListener revealActions = (view, focused) -> { if (focused) revealChrome(); };
@@ -233,10 +253,8 @@ public final class MainActivity extends AppCompatActivity {
         });
         actions.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             syncBars(appBar.getTop());
-            int width = 0; for (String label : LOCATION_LABELS) width = Math.max(width, (int)Math.ceil(locationButton.getPaint().measureText(label)));
-            width += locationButton.getPaddingStart() + locationButton.getPaddingEnd() + locationButton.getIconSize() + locationButton.getIconPadding();
-            width = Math.min(width, Math.max(dp(48), right - left - actions.getPaddingLeft() - actions.getPaddingRight() - addLink.getMeasuredWidth() - dp(12)));
-            if (locationButton.getMaxWidth() != width || locationButton.getMinWidth() != width) locationButton.setWidth(width);
+            int available = Math.max(dp(48), right - left - actions.getPaddingLeft() - actions.getPaddingRight() - addLink.getMeasuredWidth() - dp(12));
+            if (locationButton.getMaxWidth() != available) locationButton.setMaxWidth(available);
             int clearance = bottom - top + dp(8);
             if (pinGrid.getPaddingBottom() != clearance) pinGrid.setPadding(pinGrid.getPaddingLeft(), pinGrid.getPaddingTop(), pinGrid.getPaddingRight(), clearance);
             if (board.getPaddingBottom() != clearance) board.setPadding(board.getPaddingLeft(), board.getPaddingTop(), board.getPaddingRight(), clearance);
@@ -263,9 +281,12 @@ public final class MainActivity extends AppCompatActivity {
     private ScrollView scrolling(LinearLayout body) { ScrollView scroll = new ScrollView(this); scroll.addView(body); return scroll; }
     private AlertDialog dialog(String title, LinearLayout body) { ScrollView scroll = new ScrollView(this); scroll.addView(body); AlertDialog value = new MaterialAlertDialogBuilder(this).setTitle(title).setView(scroll).setNegativeButton("Close", null).create(); value.show(); value.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE); return value; }
     private Dialog destinationSheet(LinearLayout body) {
+        return bottomSheet("Save link", body);
+    }
+    private Dialog bottomSheet(String heading, LinearLayout body) {
         BottomSheetDialog value = new BottomSheetDialog(this);
         LinearLayout content = column(); LinearLayout title = row(); title.setPadding(dp(24), dp(8), dp(16), dp(4));
-        TextView label = text("Save link", 24); title.addView(label, new LinearLayout.LayoutParams(0, -2, 1)); title.addView(button("Cancel", value::dismiss, false)); content.addView(title);
+        TextView label = text(heading, 24); title.addView(label, new LinearLayout.LayoutParams(0, -2, 1)); title.addView(button(heading.equals("Save link") ? "Cancel" : "Close", value::dismiss, false)); content.addView(title);
         ScrollView scroll = new ScrollView(this); scroll.addView(body); content.addView(scroll); value.setContentView(content);
         value.setOnShowListener(d -> { value.getBehavior().setState(BottomSheetBehavior.STATE_EXPANDED); value.getBehavior().setMaxHeight((int)(getResources().getDisplayMetrics().heightPixels * .9)); }); value.show(); return value;
     }
@@ -310,14 +331,14 @@ public final class MainActivity extends AppCompatActivity {
         collectionMenu = picker(collectionButton, labels, null, selected, position -> { JSONObject value = choices.optJSONObject(position); if (value == null) return; search.setText(""); if (remote) { selectedRemote = value.optString("id"); loadDesktop(true, true); } else { selectedLocal = value.optString("id"); refreshLocal(); } });
     }
     private ListPopupWindow picker(View anchor, String[] labels, int[] icons, int selected, java.util.function.IntConsumer choose) {
+        boardMenuOpen = true; syncBoardVideos();
         ListPopupWindow popup = new ListPopupWindow(this); popup.setAnchorView(anchor); popup.setModal(true); popup.setInputMethodMode(ListPopupWindow.INPUT_METHOD_NOT_NEEDED);
+        popup.setOnDismissListener(() -> { boardMenuOpen = false; syncBoardVideos(); });
         if (anchor == locationButton) { popup.setVerticalOffset(-dp(8)); popup.setAnimationStyle(0); popup.setEpicenterBounds(new android.graphics.Rect(0, -dp(8), anchor.getWidth(), -dp(8))); }
-        android.text.TextPaint measure = new android.text.TextPaint(((TextView)anchor).getPaint()); int width = anchor.getWidth();
-        for (String label : anchor == locationButton ? LOCATION_LABELS : labels) width = Math.max(width, (int)Math.ceil(measure.measureText(label)) + dp(icons == null ? 32 : 68));
-        popup.setWidth(Math.min(Math.min(dp(320), getResources().getDisplayMetrics().widthPixels - dp(32)), width));
-        popup.setAdapter(new android.widget.ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels) {
+        android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels) {
             @Override public View getView(int position, View reusable, ViewGroup parent) {
                 TextView row = (TextView)super.getView(position, reusable, parent); row.setTextAppearance(MainActivity.this, com.google.android.material.R.style.TextAppearance_Material3_BodyLarge); row.setMinHeight(dp(48)); row.setPaddingRelative(dp(16), dp(12), dp(16), dp(12)); row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setSingleLine(true); row.setEllipsize(android.text.TextUtils.TruncateAt.END); row.setLayoutParams(new android.widget.AbsListView.LayoutParams(-1, -2));
                 row.setTextColor(position == selected ? getColor(R.color.papan_on_primary_container) : TEXT);
                 int resting = position == selected ? getColor(R.color.papan_primary_container) : Color.TRANSPARENT, focused = position == selected ? resting : getColor(R.color.papan_secondary_container);
                 android.graphics.drawable.StateListDrawable background = new android.graphics.drawable.StateListDrawable();
@@ -327,7 +348,16 @@ public final class MainActivity extends AppCompatActivity {
                 if (icon != null) { icon = icon.mutate(); icon.setTint(position == selected ? getColor(R.color.papan_on_primary_container) : MUTED); icon.setBounds(0, 0, dp(24), dp(24)); }
                 row.setCompoundDrawablesRelative(icon, null, null, null); row.setCompoundDrawablePadding(dp(12)); return row;
             }
-        });
+        }; popup.setAdapter(adapter);
+        int width = anchor.getWidth(); android.widget.ListView measuring = new android.widget.ListView(this); String[] sizingLabels = anchor == locationButton ? LOCATION_LABELS : labels;
+        for (int i = 0; i < sizingLabels.length; i++) { TextView row = (TextView)adapter.getView(i % labels.length, null, measuring); row.setLayoutDirection(anchor.getLayoutDirection()); row.setText(sizingLabels[i]); row.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)); int content = (int)Math.ceil(android.text.Layout.getDesiredWidth(row.getText(), row.getPaint())) + row.getCompoundPaddingLeft() + row.getCompoundPaddingRight(); width = Math.max(width, Math.max(content, row.getMeasuredWidth())); }
+        android.graphics.Rect background = new android.graphics.Rect(); if (popup.getBackground() != null) popup.getBackground().getPadding(background);
+        popup.setContentWidth(Math.min(getResources().getDisplayMetrics().widthPixels - dp(32) - background.left - background.right, Math.min(dp(320), width)));
+        if (anchor == locationButton) {
+            android.graphics.Rect visible = new android.graphics.Rect(); anchor.getWindowVisibleDisplayFrame(visible); int[] position = new int[2]; anchor.getLocationOnScreen(position);
+            int height = dp(16); for (int i = 0; i < labels.length; i++) { View row = adapter.getView(i, null, new android.widget.ListView(this)); row.measure(View.MeasureSpec.makeMeasureSpec(popup.getWidth(), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)); height += row.getMeasuredHeight(); }
+            popup.setHeight(Math.min(height, Math.max(dp(48), Math.min(dp(240), position[1] - visible.top - dp(8)))));
+        }
         popup.setOnItemClickListener((parent, view, position, id) -> { popup.dismiss(); choose.accept(position); }); popup.show();
         popup.getListView().setChoiceMode(selected < 0 ? android.widget.ListView.CHOICE_MODE_NONE : android.widget.ListView.CHOICE_MODE_SINGLE); if (selected >= 0) popup.getListView().setItemChecked(selected, true); popup.setSelection(Math.max(0, selected)); return popup;
     }
@@ -359,7 +389,22 @@ public final class MainActivity extends AppCompatActivity {
     private boolean fillFrames() { return appearance.getBoolean("fill:" + boardPreferenceKey(), true); }
     private void retainRemoteImages(JSONArray collections) { java.util.Set<String> authorized = new java.util.HashSet<>(); for (int i = 0; i < collections.length(); i++) { JSONObject collection = collections.optJSONObject(i); if (collection != null && !collection.optBoolean("locked")) authorized.add(collection.optString("id")); } previewImages.retainRemote(authorized); }
     private boolean measuredItem(JSONObject item) { return item.optDouble("previewWidth", item.optDouble("width", 0)) > 0 && item.optDouble("previewHeight", item.optDouble("height", 0)) > 0; }
-    private double frameRatio(JSONObject collection) {
+    private double frameRatio(JSONObject collection, JSONArray pins) {
+        if (!remote) {
+            MobileLibrary store; try { store = MobileLibrary.get(this); } catch (Exception ignored) { return 1; }
+            double sum = 0; int count = 0; String collectionId = collection == null ? "" : collection.optString("id");
+            for (int p = 0; p < pins.length(); p++) {
+                JSONObject pin = pins.optJSONObject(p); if (pin == null || !collectionId.equals(pin.optString("collectionId"))) continue;
+                JSONArray items = pin.optJSONArray("items"); if (items == null || items.length() == 0) items = new JSONArray().put(pin);
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject item = items.optJSONObject(i); if (item == null) continue; String kind = item.optString("kind", "image"); if (!("image".equals(kind) || "video".equals(kind))) continue;
+                    File file = store.mediaFile(item.optString("mediaFile", pin.optString("mediaFile")));
+                    double ratio = previewImages.localRatio(file, kind, () -> { if (!isDestroyed() && foreground && !remote && !activityOpen && collectionId.equals(selectedLocal)) { pinGrid.removeCallbacks(resizeBoard); pinGrid.postOnAnimation(resizeBoard); } });
+                    if (ratio > 0) { sum += ratio; count++; }
+                }
+            }
+            double ratio = count > 0 ? sum / count : 1; return Double.isFinite(ratio) && ratio >= .05 && ratio <= 20 ? ratio : 1;
+        }
         JSONObject preview = remote && collection != null ? collection.optJSONObject("preview") : null; if (preview == null || "cover".equals(preview.optString("fit"))) return 1;
         double count = Math.max(0, preview.optInt("measuredCount")), sum = preview.optDouble("aspectRatio", 1) * count; java.util.Set<String> known = new java.util.HashSet<>();
         for (int p = 0; p < remotePins.length(); p++) { JSONArray items = remotePins.optJSONObject(p).optJSONArray("items"); for (int i = 0; items != null && i < items.length(); i++) { JSONObject item = items.optJSONObject(i); if (item != null && measuredItem(item)) known.add(item.optString("id")); } }
@@ -425,6 +470,16 @@ public final class MainActivity extends AppCompatActivity {
         });
     }
     private void clearBoard() { revealChrome(); pinGrid.removeCallbacks(resizeBoard); pinGrid.setVisibility(View.GONE); pinGrid.setAdapter(null); boardScroll.setVisibility(View.VISIBLE); board.removeAllViews(); }
+    private void stopBoardVideos() { if (pinGrid != null) for (int i = 0; i < pinGrid.getChildCount(); i++) { RecyclerView.ViewHolder holder = pinGrid.getChildViewHolder(pinGrid.getChildAt(i)); if (holder instanceof CardHolder && ((CardHolder)holder).video != null) ((CardHolder)holder).video.setActive(false); } }
+    private void syncBoardVideos() {
+        if (pinGrid == null) return;
+        android.graphics.Rect viewport = new android.graphics.Rect(); boolean visible = foreground && resumed && !activityOpen && detailDialog == null && pinGrid.isShown() && pinGrid.getGlobalVisibleRect(viewport);
+        for (int i = 0; i < pinGrid.getChildCount(); i++) {
+            RecyclerView.ViewHolder holder = pinGrid.getChildViewHolder(pinGrid.getChildAt(i)); if (!(holder instanceof CardHolder)) continue;
+            VideoPreview video = ((CardHolder)holder).video; if (video == null) continue;
+            android.graphics.Rect bounds = new android.graphics.Rect(); video.setActive(visible && video.getGlobalVisibleRect(bounds) && android.graphics.Rect.intersects(viewport, bounds), hasWindowFocus() && !boardMenuOpen);
+        }
+    }
     private void renderPins() {
         if (board == null || activityOpen) return;
         try {
@@ -450,7 +505,7 @@ public final class MainActivity extends AppCompatActivity {
             // A second size event can arrive before the replacement layout has attached cards.
             if (anchor == null && key.equals(gridKey)) { first = gridAnchor; offset = gridAnchorOffset; }
             gridAnchor = first; gridAnchorOffset = offset;
-            double ratio = frameRatio(collection);
+            double ratio = frameRatio(collection, values);
             int frameWidth = Math.max(48, available / columns), frameHeight = Math.max(Math.round(56 * getResources().getConfiguration().fontScale), (int)Math.round(frameWidth / ratio));
             PinAdapter adapter = new PinAdapter(pins, remote, frameHeight); GridLayoutManager layout = new GridLayoutManager(this, columns);
             final int spanCount = columns;
@@ -472,13 +527,18 @@ public final class MainActivity extends AppCompatActivity {
         }
         @Override public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
             if (!(holder instanceof CardHolder)) { Button more = (Button)holder.itemView; more.setText(loadingMore ? "Loading pins…" : "Load more pins"); more.setEnabled(!loadingMore); return; }
-            CardHolder card = (CardHolder)holder; JSONObject pin = pins.get(position); card.body.removeAllViews(); card.itemView.setContentDescription("Open pin: " + pin.optString("title")); card.itemView.setOnClickListener(v -> openPin(pin, fromDesktop));
+            CardHolder card = (CardHolder)holder; JSONObject pin = pins.get(position); if (card.video != null) card.video.setActive(false); card.video = null; card.body.removeAllViews(); card.itemView.setContentDescription("Open pin: " + pin.optString("title")); card.itemView.setOnClickListener(v -> openPin(pin, fromDesktop));
             FrameLayout preview = new FrameLayout(MainActivity.this); preview.setBackgroundColor(getColor(R.color.papan_background)); card.body.addView(preview, new LinearLayout.LayoutParams(-1, dp(frameHeight)));
             String notice = !fromDesktop && "pending".equals(pin.optString("capture")) ? "Preparing preview…" : !fromDesktop && "failed".equals(pin.optString("capture")) ? "Preview unavailable" : null;
             try {
                 JSONObject item = cover(pin, fromDesktop);
                 if (item != null && ("image".equals(item.optString("kind")) || !fromDesktop && "video".equals(item.optString("kind")) || fromDesktop && item.has("thumbnailUrl"))) preview.addView(imageFrame(pin, item, fromDesktop, fillFrames()), new FrameLayout.LayoutParams(-1, -1));
                 else if (notice == null) { String excerpt = item == null ? pin.optString("notes") : item.optString("text"); TextView kind = text(excerpt.isEmpty() ? item != null && "video".equals(item.optString("kind")) ? "Video" : "Saved link" : excerpt, 16); kind.setTextColor(MUTED); kind.setPadding(dp(12), dp(10), dp(12), 0); kind.setEllipsize(android.text.TextUtils.TruncateAt.END); kind.setMaxLines(1); preview.addView(kind, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP)); }
+                if (item != null && "video".equals(item.optString("kind"))) {
+                    if (fromDesktop) { String url = item.optString("previewUrl", item.optString("originalUrl")); if (!url.isEmpty()) card.video = new VideoPreview(MainActivity.this, desktop, url, fillFrames()); }
+                    else { File file = MobileLibrary.get(MainActivity.this).mediaFile(item.optString("mediaFile", pin.optString("mediaFile"))); if (file != null && file.isFile()) card.video = new VideoPreview(MainActivity.this, file, fillFrames()); }
+                    if (card.video != null) preview.addView(card.video, new FrameLayout.LayoutParams(-1, -1));
+                }
             } catch (Exception error) { TextView failed = text("Preview unavailable", 14); failed.setPadding(dp(12), dp(10), dp(12), 0); preview.addView(failed); }
             LinearLayout overlay = new LinearLayout(MainActivity.this) { @Override protected void onMeasure(int width, int height) { super.onMeasure(width, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)); } }, caption = column(); overlay.setOrientation(LinearLayout.VERTICAL);
             overlay.setBackground(new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, new int[] {Color.TRANSPARENT, 0x8C000000, 0xA6000000}));
@@ -492,10 +552,13 @@ public final class MainActivity extends AppCompatActivity {
             View placeholder = preview.getChildAt(0); if (placeholder instanceof TextView) { placeholder.setBackgroundColor(getColor(R.color.papan_background)); preview.bringChildToFront(placeholder); }
             if (notice != null) { TextView state = text(notice, 12); state.setTextColor(MUTED); state.setBackgroundColor(getColor(R.color.papan_background)); state.setPadding(dp(10), dp(6), dp(10), dp(6)); state.setMaxLines(1); state.setEllipsize(android.text.TextUtils.TruncateAt.END); preview.addView(state, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP)); }
         }
-        @Override public void onViewRecycled(RecyclerView.ViewHolder holder) { if (holder instanceof CardHolder) ((CardHolder)holder).body.removeAllViews(); }
+        @Override public void onViewAttachedToWindow(RecyclerView.ViewHolder holder) { pinGrid.post(MainActivity.this::syncBoardVideos); }
+        @Override public void onViewDetachedFromWindow(RecyclerView.ViewHolder holder) { if (holder instanceof CardHolder && ((CardHolder)holder).video != null) ((CardHolder)holder).video.setActive(false); }
+        @Override public void onViewRecycled(RecyclerView.ViewHolder holder) { if (holder instanceof CardHolder) { CardHolder card = (CardHolder)holder; if (card.video != null) card.video.setActive(false); card.video = null; card.body.removeAllViews(); } }
     }
     private static final class CardHolder extends RecyclerView.ViewHolder {
         final LinearLayout body;
+        VideoPreview video;
         CardHolder(MaterialCardView card, LinearLayout content) { super(card); body = content; }
     }
     private FrameLayout imageFrame(JSONObject pin, JSONObject item, boolean fromDesktop, boolean crop) {
@@ -505,15 +568,15 @@ public final class MainActivity extends AppCompatActivity {
         FrameLayout frame = new FrameLayout(this); frame.setBackgroundColor(getColor(R.color.papan_background)); ImageView image = thumbnail ? new ImageView(this) : new ZoomImageView(this); if (thumbnail) image.setScaleType(crop ? ImageView.ScaleType.CENTER_CROP : ImageView.ScaleType.FIT_CENTER); image.setContentDescription(pin.optString("title")); frame.addView(image, new FrameLayout.LayoutParams(-1, -1)); TextView loading = text("Loading preview…", 13); loading.setTextColor(MUTED); loading.setGravity(Gravity.CENTER); frame.addView(loading, new FrameLayout.LayoutParams(-1, -1)); image.setTag(loading); loadImage(image, pin, item, fromDesktop, thumbnail); return frame;
     }
     private JSONObject cover(JSONObject pin, boolean fromDesktop) throws Exception {
-        if (!fromDesktop) return pin.has("mediaFile") ? new JSONObject().put("kind", pin.optString("kind", "image")) : null;
+        if (!fromDesktop) { JSONArray items = pin.optJSONArray("items"); if (items != null && items.length() > 0) return items.getJSONObject(0); return pin.has("mediaFile") ? new JSONObject().put("kind", pin.optString("kind", "image")) : null; }
         JSONArray items = pin.optJSONArray("items"); if (items == null) return null; JSONObject fallback = null;
         for (int i = 0; i < items.length(); i++) { JSONObject item = items.getJSONObject(i); if (item.optString("id").equals(pin.optString("coverId"))) return item; if (fallback == null && !"text".equals(item.optString("kind"))) fallback = item; } return fallback;
     }
     private void loadImage(ImageView view, JSONObject pin, JSONObject item, boolean fromDesktop, boolean thumbnail) {
         try {
             final String url = fromDesktop ? thumbnail ? item.optString("thumbnailUrl", item.optString("previewUrl")) : item.optString("previewUrl") : "";
-            final File saved = fromDesktop ? null : MobileLibrary.get(this).mediaFile(pin.optString("mediaFile"));
-            String key = fromDesktop ? "remote:" + pin.optString("collectionId") + ":" + desktop.sessionId() + ":" + url : "local:" + saved + ":" + (saved == null ? "" : saved.lastModified() + ":" + saved.length()); key += thumbnail ? ":thumbnail" : ":viewer";
+            final File saved = fromDesktop ? null : MobileLibrary.get(this).mediaFile(item.optString("mediaFile", pin.optString("mediaFile")));
+            String key = fromDesktop ? "remote:" + pin.optString("collectionId") + ":" + desktop.sessionId() + ":" + url : PreviewImages.localKey(saved); key += thumbnail ? ":thumbnail" : ":viewer";
             if (!thumbnail) { String previewKey = fromDesktop ? "remote:" + pin.optString("collectionId") + ":" + desktop.sessionId() + ":" + item.optString("thumbnailUrl", item.optString("previewUrl")) + ":thumbnail" : key.substring(0, key.length() - ":viewer".length()) + ":thumbnail"; Bitmap ready = previewImages.peek(previewKey); if (ready != null) { view.setImageBitmap(ready); ((TextView)view.getTag()).setVisibility(View.GONE); } }
             previewImages.load(key, () -> {
                 if (!fromDesktop && "video".equals(item.optString("kind"))) {
@@ -528,7 +591,7 @@ public final class MainActivity extends AppCompatActivity {
                 else { file = saved; if (file == null) return null; BitmapFactory.decodeFile(file.toString(), options); }
                 int maximum = thumbnail ? 512 : 1536; options.inSampleSize = 1; while (options.outWidth / options.inSampleSize > maximum || options.outHeight / options.inSampleSize > maximum) options.inSampleSize *= 2; options.inJustDecodeBounds = false;
                 return fromDesktop ? BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options) : BitmapFactory.decodeFile(file.toString(), options);
-            }, bitmap -> { if (!isDestroyed()) { view.setImageBitmap(bitmap); TextView loading = (TextView)view.getTag(); if (bitmap != null) { loading.setVisibility(View.GONE); if (fromDesktop && thumbnail && !measuredItem(item)) { JSONObject collection = find(remoteCollections, pin.optString("collectionId")); double before = frameRatio(collection); boolean changed = previewImages.measure(pin.optString("collectionId"), item.optString("id"), (double)bitmap.getWidth() / bitmap.getHeight()); if (changed && remote && selectedRemote.equals(pin.optString("collectionId")) && Math.abs(before - frameRatio(collection)) > .001) { pinGrid.removeCallbacks(resizeBoard); pinGrid.postOnAnimation(resizeBoard); } } } else { loading.setText("Preview unavailable"); view.setContentDescription("Preview unavailable. " + pin.optString("title")); } } });
+            }, bitmap -> { if (!isDestroyed()) { view.setImageBitmap(bitmap); TextView loading = (TextView)view.getTag(); if (bitmap != null) { loading.setVisibility(View.GONE); if (fromDesktop && thumbnail && !measuredItem(item)) { JSONObject collection = find(remoteCollections, pin.optString("collectionId")); double before = frameRatio(collection, remotePins); boolean changed = previewImages.measure(pin.optString("collectionId"), item.optString("id"), (double)bitmap.getWidth() / bitmap.getHeight()); if (changed && remote && selectedRemote.equals(pin.optString("collectionId")) && Math.abs(before - frameRatio(collection, remotePins)) > .001) { pinGrid.removeCallbacks(resizeBoard); pinGrid.postOnAnimation(resizeBoard); } } } else { loading.setText("Preview unavailable"); view.setContentDescription("Preview unavailable. " + pin.optString("title")); } } });
         } catch (Exception ignored) { ((TextView)view.getTag()).setText("Preview unavailable"); }
     }
     private void newCollection(Runnable after) { EditText name = field("Collection name", false); LinearLayout body = dialogBody(); addField(body, name); AlertDialog value = new MaterialAlertDialogBuilder(this).setTitle("New phone collection").setView(scrolling(body)).setNegativeButton("Cancel", null).setPositiveButton("Create", null).create(); value.show(); value.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> { try { selectedLocal = MobileLibrary.get(this).create(name.getText().toString()); value.dismiss(); if (after != null) after.run(); else switchLocation(false); } catch (Exception error) { error(name, error.getMessage()); } }); }
@@ -549,14 +612,19 @@ public final class MainActivity extends AppCompatActivity {
             });
         } catch (Exception error) { message(error.getMessage()); }
     }
-    private void enterLink() { EditText link = field("https://…", false); link.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI); LinearLayout body = dialogBody(); addField(body, link); AlertDialog value = new MaterialAlertDialogBuilder(this).setTitle("Add a link").setView(scrolling(body)).setNegativeButton("Cancel", null).setPositiveButton("Choose collection", null).create(); value.show(); value.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> { try { String url = LocalCapture.webLink(link.getText().toString()); value.dismiss(); chooseDestination(url); } catch (Exception error) { error(link, error.getMessage()); } }); }
+    private void enterLink() { EditText link = field("https://…", false); link.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI); LinearLayout body = dialogBody(); addField(body, link); AlertDialog value = new MaterialAlertDialogBuilder(this).setTitle("Add a link").setView(scrolling(body)).setNegativeButton("Cancel", null).setPositiveButton("Choose media", null).create(); value.show(); value.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> { try { String url = LocalCapture.webLink(link.getText().toString()); value.dismiss(); chooseDestination(url); } catch (Exception error) { error(link, error.getMessage()); } }); }
     private void chooseDestination(String input) {
+        try { String url = LocalCapture.webLink(input); if (mediaChooser != null) mediaChooser.dismiss(); pendingLink = url; mediaChooser = new MediaChooser(this, url, (plan, keys) -> chooseDestination(url, plan, keys), () -> chooseDestination(url, null, null), () -> pendingLink = null); }
+        catch (Exception error) { message(error.getMessage()); }
+    }
+    private void chooseDestination(String input, JSONObject plan, JSONArray keys) {
         try {
             String url = LocalCapture.webLink(input); if (saveDialog != null) saveDialog.dismiss(); pendingLink = url;
             LinearLayout body = dialogBody(); TextView source = text(url, 14); source.setTextColor(MUTED); body.addView(source); body.addView(text("Phone", 18)); JSONArray local = MobileLibrary.get(this).snapshot().getJSONArray("collections");
-            for (int i = 0; i < local.length(); i++) { JSONObject collection = local.getJSONObject(i); body.addView(button("Phone · " + collection.getString("name"), () -> saveLocal(url, collection.optString("id")), false)); }
-            body.addView(button("+ New phone collection", () -> newCollection(() -> saveLocal(url, selectedLocal)), false));
+            for (int i = 0; i < local.length(); i++) { JSONObject collection = local.getJSONObject(i); body.addView(button("Phone · " + collection.getString("name"), () -> saveLocal(url, collection.optString("id"), plan, keys), false)); }
+            body.addView(button("+ New phone collection", () -> newCollection(() -> saveLocal(url, selectedLocal, plan, keys)), false));
             LinearLayout remoteChoices = column(); body.addView(remoteChoices); remoteChoices.addView(text("Desktop", 18)); TextView loading = text("Checking paired desktop…", 14); remoteChoices.addView(loading);
+            if (plan != null) remoteChoices.addView(text("Desktop downloads the original link using its own media selection.", 14));
             saveDialog = destinationSheet(body); final Dialog current = saveDialog; current.setOnDismissListener(d -> { if (saveDialog == current) { pendingLink = null; saveDialog = null; } });
             requests.execute(() -> {
                 JSONArray collections = null; String error = null; boolean legacy = false;
@@ -564,28 +632,36 @@ public final class MainActivity extends AppCompatActivity {
                 catch (Exception failure) { error = failure.getMessage(); }
                 final JSONArray choices = collections; final String problem = error; final boolean fallback = legacy;
                 runOnUiThread(() -> {
-                    if (isDestroyed() || saveDialog != current || !current.isShowing()) return; remoteChoices.removeAllViews(); remoteChoices.addView(text("Desktop", 18));
+                    if (isDestroyed() || saveDialog != current || !current.isShowing()) return; remoteChoices.removeAllViews(); remoteChoices.addView(text("Desktop", 18)); if (plan != null) remoteChoices.addView(text("Desktop downloads the original link using its own media selection.", 14));
                     if (choices != null) { if (choices.length() == 0) remoteChoices.addView(text("Open a collection on the desktop to save there.", 14)); for (int i = 0; i < choices.length(); i++) { JSONObject collection = choices.optJSONObject(i); if (collection == null) continue; remoteChoices.addView(button("Desktop · " + collection.optString("name") + (collection.optBoolean("protected") ? " · protected" : ""), () -> { if (collection.optBoolean("locked")) unlock(collection, () -> saveDesktop(url, collection.optString("id"), collection.optString("name"))); else saveDesktop(url, collection.optString("id"), collection.optString("name")); }, false)); } }
                     else { remoteChoices.addView(text(problem == null ? "Desktop unavailable." : problem, 14)); try { if (PhoneStore.get(this).snapshot().has("config")) remoteChoices.addView(button(fallback ? "Desktop default collection" : "Queue for desktop default", () -> saveDesktop(url, "", "Desktop default"), false)); else { remoteChoices.addView(button("Queue for desktop after pairing", () -> saveDesktop(url, "", "Desktop default"), false)); remoteChoices.addView(button("Pair desktop", () -> { current.dismiss(); scanPair(); }, false)); } } catch (Exception failure) { message(failure.getMessage()); } }
                 });
             });
         } catch (Exception error) { message(error.getMessage()); }
     }
-    private void saveLocal(String url, String id) { try { MobileLibrary.get(this).add(id, url); selectedLocal = id; if (saveDialog != null) saveDialog.dismiss(); switchLocation(false); message("Saved on phone. Preparing preview…"); capture(); } catch (Exception error) { message(error.getMessage()); } }
+    private void saveLocal(String url, String id, JSONObject plan, JSONArray keys) { try { if (plan == null) MobileLibrary.get(this).add(id, url); else MobileLibrary.get(this).addSelection(id, url, plan, keys); selectedLocal = id; if (saveDialog != null) saveDialog.dismiss(); switchLocation(false); message(plan == null ? "Saved on phone. Preparing preview…" : "Saved on phone. Downloading selected media…"); capture(); } catch (Exception error) { message(error.getMessage()); } }
     private void saveDesktop(String url, String id, String name) { try { sharedId = PhoneStore.get(this).enqueue(url, id, name); if (saveDialog != null) saveDialog.dismiss(); pollUntil = SystemClock.elapsedRealtime() + 30000; message("Queued for " + name + "."); Delivery.schedule(this); sync(); } catch (Exception error) { message(error.getMessage()); } }
     private void unlock(JSONObject collection, Runnable after) {
         EditText password = field("Collection password", false); password.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD); fieldLayout(password).setEndIconMode(TextInputLayout.END_ICON_PASSWORD_TOGGLE); LinearLayout body = dialogBody(); body.addView(text("Password for " + collection.optString("name") + ". Use a trusted local network; the desktop receiver uses HTTP.", 14)); addField(body, password);
         AlertDialog value = new MaterialAlertDialogBuilder(this).setTitle("Unlock desktop collection").setView(scrolling(body)).setNegativeButton("Cancel", null).setPositiveButton("Unlock", null).create(); value.show(); value.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         value.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> { String secret = password.getText().toString(); if (secret.isEmpty()) { error(password, "Enter the password."); return; } value.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false); password.setText(""); requests.execute(() -> { try { desktop.unlock(collection.optString("id"), secret); runOnUiThread(() -> { if (isDestroyed() || !value.isShowing()) return; value.dismiss(); after.run(); }); } catch (Exception error) { runOnUiThread(() -> { if (!isDestroyed() && value.isShowing()) { value.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true); error(password, error.getMessage()); } }); } }); });
     }
-    private void capture() { LocalCapture.submit(getApplicationContext(), error -> runOnUiThread(() -> { if (isDestroyed()) return; if (!remote) refreshLocal(); if (error != null) message(error.getMessage()); else if (status.getText().toString().startsWith("Saved on phone. Preparing")) message("Saved on phone."); })); }
+    private void capture() { LocalCapture.submit(getApplicationContext(), error -> runOnUiThread(() -> { if (isDestroyed()) return; if (!remote) refreshLocal(); if (error != null) message(error.getMessage()); else if (status.getText().toString().startsWith("Saved on phone.")) message("Saved on phone."); })); }
     private void openPin(JSONObject pin, boolean fromDesktop) {
         try {
-            handler.removeCallbacks(browsePoll); JSONArray items = fromDesktop ? pin.optJSONArray("items") : new JSONArray(); File local = null;
-            if (!fromDesktop) { JSONObject item = cover(pin, false); if (item != null) { items.put(item); local = MobileLibrary.get(this).mediaFile(pin.optString("mediaFile")); } }
+            handler.removeCallbacks(browsePoll); JSONArray items = pin.optJSONArray("items"); File local = null;
+            if (!fromDesktop && items == null) { items = new JSONArray(); JSONObject item = cover(pin, false); if (item != null) { items.put(item); local = MobileLibrary.get(this).mediaFile(pin.optString("mediaFile")); } }
             if (items == null || items.length() == 0) items = new JSONArray().put(new JSONObject().put("kind", "text").put("text", pin.optString("text", pin.optString("notes"))));
             boolean restore = pin.optString("id").equals(viewerPinId);
-            PinViewer value = new PinViewer(this, pin, items, (item, thumbnail) -> imageFrame(pin, item, fromDesktop, false, thumbnail), fromDesktop ? desktop : null, local, () -> pinDetails(pin, fromDesktop), this::navigatePin, restore ? viewerItemId : null, restore ? viewerPosition : 0, !restore || viewerPlaying);
+            PinViewer value = new PinViewer(this, pin, items, (item, thumbnail) -> imageFrame(pin, item, fromDesktop, false, thumbnail), fromDesktop ? desktop : null, local, new PinViewer.Actions() {
+                public void populate(android.view.Menu menu) {
+                    menu.add(0, 201, 0, "Details");
+                    if (!fromDesktop) { menu.add(0, 202, 1, "Edit pin"); menu.add(0, 203, 2, "Remove pin"); }
+                    menu.add(0, 204, 3, "Copy link"); menu.add(0, 205, 4, "Open original"); menu.add(0, 206, 5, "Save to another collection");
+                    if (!fromDesktop) menu.add(0, 207, 6, "failed".equals(pin.optString("capture")) ? "Retry download" : "Refresh saved media");
+                }
+                public void select(int id) { pinAction(id, pin, fromDesktop); }
+            }, this::navigatePin, restore ? viewerItemId : null, restore ? viewerPosition : 0, !restore || viewerPlaying);
             if (fromDesktop && find(remoteCollections, selectedRemote) != null && find(remoteCollections, selectedRemote).optBoolean("protected")) value.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
             detailDialog = value; viewerPinId = null; value.setOnDismissListener(d -> { if (detailDialog != value) return; handler.removeCallbacks(detailPoll); if (detailInfo != null) detailInfo.dismiss(); detailDialog = null; if (foreground) viewerPinId = null; if (remote && foreground && !movingViewer) loadDesktop(false, false); }); value.show();
             if (fromDesktop) handler.postDelayed(detailPoll, 3000);
@@ -608,15 +684,27 @@ public final class MainActivity extends AppCompatActivity {
     private void pinDetails(JSONObject pin, boolean fromDesktop) {
         try {
             if (detailInfo != null) detailInfo.dismiss(); LinearLayout body = dialogBody(); body.addView(text(pin.optString("title"), 20));
-            if (!fromDesktop && !pin.optString("captureError").isEmpty()) { body.addView(text(pin.optString("captureError"), 14)); body.addView(button("Retry preview", () -> { try { MobileLibrary.get(this).retry(pin.getString("id")); if (detailDialog != null) detailDialog.dismiss(); capture(); } catch (Exception error) { message(error.getMessage()); } }, false)); }
+            if (!fromDesktop && !pin.optString("captureError").isEmpty()) body.addView(text(pin.optString("captureError"), 14));
             if (!pin.optString("notes").isEmpty()) body.addView(text(pin.optString("notes"), 16)); if (!pin.optString("text").isEmpty()) body.addView(text(pin.optString("text"), 16));
             if (fromDesktop && pin.optBoolean("textTruncated")) body.addView(text("Text preview shortened for your phone. Open the source for the full page.", 13));
             TextView source = text(pin.optString("sourceUrl"), 14); source.setTextIsSelectable(true); source.setTextColor(MUTED); body.addView(source);
-            body.addView(button("Open source", () -> { try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(LocalCapture.webLink(pin.optString("sourceUrl"))))); } catch (Exception error) { message("No app could open this link."); } }, true));
-            if (!fromDesktop) { body.addView(button("Edit title and notes", () -> editPin(pin), false)); body.addView(button("Save to another collection", () -> { if (detailDialog != null) detailDialog.dismiss(); chooseDestination(pin.optString("sourceUrl")); }, false)); body.addView(button("Delete from phone", () -> new MaterialAlertDialogBuilder(this).setTitle("Delete this phone pin?").setMessage("Its saved phone media will also be removed.").setNegativeButton("Keep", null).setPositiveButton("Delete", (d,w) -> { try { MobileLibrary.get(this).removePin(pin.getString("id")); if (detailDialog != null) detailDialog.dismiss(); refreshLocal(); } catch (Exception error) { message(error.getMessage()); } }).show(), false)); }
-            body.addView(button("Close details", () -> { if (detailInfo != null) detailInfo.dismiss(); }, false)); detailInfo = destinationSheet(body);
+            detailInfo = bottomSheet("Pin details", body);
             if (fromDesktop && find(remoteCollections, selectedRemote) != null && find(remoteCollections, selectedRemote).optBoolean("protected")) detailInfo.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         } catch (Exception error) { message(error.getMessage()); }
+    }
+    private void pinAction(int action, JSONObject pin, boolean fromDesktop) {
+        try {
+            switch (action) {
+                case 201: pinDetails(pin, fromDesktop); break;
+                case 202: if (!fromDesktop) editPin(pin); break;
+                case 203: if (!fromDesktop) new MaterialAlertDialogBuilder(this).setTitle("Remove this phone pin?").setMessage("Its saved phone media will also be removed.").setNegativeButton("Keep", null).setPositiveButton("Remove", (d,w) -> { try { MobileLibrary.get(this).removePin(pin.getString("id")); if (detailDialog != null) detailDialog.dismiss(); refreshLocal(); } catch (Exception error) { message(error.getMessage()); } }).show(); break;
+                case 204: ((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Papan link", pin.optString("sourceUrl"))); if (detailDialog != null) detailDialog.notice("Link copied."); break;
+                case 205: startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(LocalCapture.webLink(pin.optString("sourceUrl"))))); break;
+                case 206: if (detailDialog != null) detailDialog.dismiss(); chooseDestination(pin.optString("sourceUrl")); break;
+                case 207: if (!fromDesktop) { if (detailDialog != null) detailDialog.dismiss(); String host = java.net.URI.create(pin.optString("sourceUrl")).getHost(); if (!pin.has("items") && host != null && (host.equals("instagram.com") || host.endsWith(".instagram.com") || host.equals("x.com") || host.endsWith(".x.com"))) chooseDestination(pin.optString("sourceUrl")); else { MobileLibrary.get(this).retry(pin.getString("id")); capture(); } } break;
+                default: break;
+            }
+        } catch (Exception error) { if (detailDialog != null) detailDialog.notice(error.getMessage() == null ? "Could not complete this action." : error.getMessage()); else message(error.getMessage()); }
     }
     private void checkDetailAccess() {
         if (!foreground || !remote || detailDialog == null) return;
@@ -624,7 +712,28 @@ public final class MainActivity extends AppCompatActivity {
         requests.execute(() -> { boolean permitted = false; try { JSONObject collection = find(desktop.collections(), id); permitted = collection != null && !collection.optBoolean("locked"); } catch (Exception ignored) {} final boolean allowed = permitted;
             runOnUiThread(() -> { if (isDestroyed() || showing != detailDialog) return; if (!allowed) { retainRemoteImages(new JSONArray()); remotePins = new JSONArray(); showing.dismiss(); message("Desktop access ended. Unlock or reconnect to continue."); } else handler.postDelayed(detailPoll, 3000); }); });
     }
-    private void editPin(JSONObject pin) { LinearLayout body = dialogBody(); EditText title = field("Title", false), notes = field("Notes", true); title.setText(pin.optString("title")); notes.setText(pin.optString("notes")); addField(body, title); addField(body, notes); AlertDialog value = dialog("Edit phone pin", body); Button save = button("Save changes", () -> { try { MobileLibrary.get(this).edit(pin.getString("id"), title.getText().toString(), notes.getText().toString()); value.dismiss(); if (detailDialog != null) detailDialog.dismiss(); refreshLocal(); } catch (Exception error) { error(title, error.getMessage()); } }, true); body.addView(save); }
+    private void editPin(JSONObject pin) {
+        try {
+            LinearLayout body = dialogBody(); EditText title = field("Title", false), notes = field("Notes", true);
+            title.setText(pin.optString("title")); notes.setText(pin.optString("notes")); addField(body, title); addField(body, notes);
+            JSONArray collections = MobileLibrary.get(this).snapshot().getJSONArray("collections"); String[] names = new String[collections.length()]; String[] chosen = {pin.getString("collectionId")}; int selected = 0;
+            for (int i = 0; i < collections.length(); i++) { JSONObject collection = collections.getJSONObject(i); names[i] = collection.getString("name"); if (chosen[0].equals(collection.getString("id"))) selected = i; }
+            TextInputLayout layout = new TextInputLayout(this); layout.setBoxBackgroundMode(TextInputLayout.BOX_BACKGROUND_OUTLINE); layout.setHint("Collection");
+            com.google.android.material.textfield.MaterialAutoCompleteTextView collection = new com.google.android.material.textfield.MaterialAutoCompleteTextView(layout.getContext());
+            collection.setInputType(android.text.InputType.TYPE_NULL); collection.setKeyListener(null); collection.setSingleLine(true); collection.setTextSize(16); collection.setMinHeight(dp(56)); collection.setSimpleItems(names); collection.setText(names[selected], false);
+            collection.setPaddingRelative(title.getPaddingStart(), title.getPaddingTop(), title.getPaddingEnd(), title.getPaddingBottom());
+            collection.setTag(layout); layout.addView(collection, new LinearLayout.LayoutParams(-1, -2)); layout.setEndIconMode(TextInputLayout.END_ICON_DROPDOWN_MENU); addField(body, collection);
+            collection.setOnItemClickListener((parent, view, position, id) -> { try { chosen[0] = collections.getJSONObject(position).getString("id"); layout.setError(null); } catch (Exception error) { layout.setError(error.getMessage()); } });
+            AlertDialog value = dialog("Edit phone pin", body);
+            body.addView(button("Save changes", () -> {
+                if (title.getText().toString().trim().isEmpty()) { error(title, "Enter a title."); return; }
+                try {
+                    MobileLibrary.get(this).edit(pin.getString("id"), chosen[0], title.getText().toString(), notes.getText().toString()); value.dismiss(); if (detailDialog != null) detailDialog.dismiss();
+                    boolean moved = !selectedLocal.equals(chosen[0]); selectedLocal = chosen[0]; if (moved) search.setText(""); refreshLocal();
+                } catch (Exception error) { layout.setError(error.getMessage()); }
+            }, true));
+        } catch (Exception error) { message(error.getMessage()); }
+    }
     private void connections() {
         settingsOpen = true; LinearLayout body = dialogBody(); body.addView(text("Enable Receive from phone on your computer. Pair desktop finds it nearby; approve the matching code there. Paired desktops reconnect automatically.", 15));
         connectionFeedback = text("", 14); connectionFeedback.setVisibility(View.GONE); connectionFeedback.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE); body.addView(connectionFeedback);

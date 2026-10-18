@@ -28,12 +28,14 @@ import java.util.Locale;
 final class PinViewer extends Dialog {
     interface Images { View frame(JSONObject item, boolean thumbnail); }
     interface Navigate { boolean move(int delta); }
+    interface Actions { void populate(android.view.Menu menu); void select(int id); }
     final JSONObject pin;
     private final JSONArray items;
     private final Images images;
     private final DesktopLibrary desktop;
     private final File localFile;
-    private final Runnable details;
+    private final Actions actions;
+    private MaterialToolbar toolbar;
     private final Navigate navigate;
     private final Handler handler = new Handler();
     private LinearLayout root, controls;
@@ -49,8 +51,8 @@ final class PinViewer extends Dialog {
     private boolean swipe;
     private final Runnable tick = new Runnable() { public void run() { updateProgress(); if (isShowing() && video != null) handler.postDelayed(this, 300); } };
 
-    PinViewer(Context context, JSONObject pin, JSONArray items, Images images, DesktopLibrary desktop, File localFile, Runnable details, Navigate navigate, String itemId, int position, boolean playing) {
-        super(context, R.style.PapanTheme); this.pin = pin; this.items = items; this.images = images; this.desktop = desktop; this.localFile = localFile; this.details = details; this.navigate = navigate; this.position = position; this.playing = playing;
+    PinViewer(Context context, JSONObject pin, JSONArray items, Images images, DesktopLibrary desktop, File localFile, Actions actions, Navigate navigate, String itemId, int position, boolean playing) {
+        super(context, R.style.PapanTheme); this.pin = pin; this.items = items; this.images = images; this.desktop = desktop; this.localFile = localFile; this.actions = actions; this.navigate = navigate; this.position = position; this.playing = playing;
         String selected = itemId == null ? pin.optString("coverId") : itemId;
         for (int i = 0; i < items.length(); i++) if (selected.equals(items.optJSONObject(i).optString("id"))) index = i;
     }
@@ -64,18 +66,33 @@ final class PinViewer extends Dialog {
         super.onCreate(saved); WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         root = column(); root.setBackgroundColor(getContext().getColor(R.color.papan_background)); setContentView(root);
         ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> { Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()); view.setPadding(bars.left, bars.top, bars.right, bars.bottom); return WindowInsetsCompat.CONSUMED; });
-        MaterialToolbar toolbar = new MaterialToolbar(getContext()); toolbar.setTitle(pin.optString("title")); toolbar.setTitleTextAppearance(getContext(), com.google.android.material.R.style.TextAppearance_Material3_TitleMedium);
+        toolbar = new MaterialToolbar(getContext()); toolbar.setTitle(pin.optString("title")); toolbar.setTitleTextAppearance(getContext(), com.google.android.material.R.style.TextAppearance_Material3_TitleMedium);
         try { String host = new java.net.URI(pin.optString("sourceUrl")).getHost(); if (host != null) toolbar.setSubtitle(host.replaceFirst("^www\\.", "")); } catch (Exception ignored) {}
         toolbar.setNavigationIcon(R.drawable.close); toolbar.setNavigationIconTint(getContext().getColor(R.color.papan_on_surface)); toolbar.setNavigationContentDescription("Close reference"); toolbar.setNavigationOnClickListener(v -> dismiss());
-        toolbar.getMenu().add(0, 1, 0, "Details").setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS); toolbar.getMenu().add(0, 2, 1, "Previous pin"); toolbar.getMenu().add(0, 3, 2, "Next pin");
-        toolbar.setOnMenuItemClickListener(item -> { if (item.getItemId() == 1) { pause(); details.run(); } else movePin(item.getItemId() == 2 ? -1 : 1); return true; }); root.addView(toolbar, new LinearLayout.LayoutParams(-1, -2));
+        actions.populate(toolbar.getMenu());
+        toolbar.setOnMenuItemClickListener(item -> { pause(); int id = item.getItemId(); toolbar.dismissPopupMenus(); handler.post(() -> { if (isShowing()) actions.select(id); }); return true; }); root.addView(toolbar, new LinearLayout.LayoutParams(-1, -2));
         stage = new FrameLayout(getContext()); stage.setContentDescription("Reference media. Swipe up or down for other pins; swipe sideways for this pin's attachments."); root.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1)); stage.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob) -> fitVideo());
+        stage.setFocusable(true); stage.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+            @Override public void onInitializeAccessibilityNodeInfo(View host, android.view.accessibility.AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(host, info); info.setScrollable(true); info.addAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD); info.addAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_BACKWARD);
+                if (items.length() > 1) { info.addAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT); info.addAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT); }
+            }
+            @Override public boolean performAccessibilityAction(View host, int action, Bundle arguments) {
+                if (action == android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD || action == android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) { movePin(action == android.view.accessibility.AccessibilityNodeInfo.ACTION_SCROLL_FORWARD ? 1 : -1); return true; }
+                if (items.length() > 1 && (action == android.R.id.accessibilityActionScrollLeft || action == android.R.id.accessibilityActionScrollRight)) { showItem((index + (action == android.R.id.accessibilityActionScrollRight ? 1 : items.length() - 1)) % items.length(), false); return true; }
+                return super.performAccessibilityAction(host, action, arguments);
+            }
+        });
+        stage.setOnKeyListener((view, key, event) -> {
+            if (event.getAction() != android.view.KeyEvent.ACTION_DOWN) return false;
+            if (key == android.view.KeyEvent.KEYCODE_DPAD_DOWN || key == android.view.KeyEvent.KEYCODE_DPAD_UP) { movePin(key == android.view.KeyEvent.KEYCODE_DPAD_DOWN ? 1 : -1); return true; }
+            if (items.length() > 1 && (key == android.view.KeyEvent.KEYCODE_DPAD_LEFT || key == android.view.KeyEvent.KEYCODE_DPAD_RIGHT)) { showItem((index + (key == android.view.KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : items.length() - 1)) % items.length(), false); return true; }
+            return false;
+        });
         status = label("", 15); status.setBackgroundColor(getContext().getColor(R.color.papan_background)); status.setGravity(Gravity.CENTER); status.setPadding(dp(20), dp(12), dp(20), dp(12)); status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         controls = column(); controls.setPadding(dp(12), 0, dp(12), dp(8)); root.addView(controls, new LinearLayout.LayoutParams(-1, -2));
         if (items.length() > 1) {
-            LinearLayout pages = new LinearLayout(getContext()); pages.setGravity(Gravity.CENTER_VERTICAL); page = label("", 14); page.setGravity(Gravity.CENTER);
-            MaterialButton previous = action("Previous", () -> showItem((index + items.length() - 1) % items.length(), false)), next = action("Next", () -> showItem((index + 1) % items.length(), false));
-            pages.addView(previous); pages.addView(page, new LinearLayout.LayoutParams(0, -2, 1)); pages.addView(next); root.addView(pages);
+            page = label("", 14); page.setGravity(Gravity.CENTER); page.setPadding(0, dp(8), 0, dp(8)); root.addView(page);
         }
         showItem(index, true);
     }
@@ -88,7 +105,7 @@ final class PinViewer extends Dialog {
             android.widget.ScrollView scroll = new android.widget.ScrollView(getContext()); TextView text = label(item == null ? pin.optString("text", pin.optString("notes")) : item.optString("text"), 17); text.setPadding(dp(24), dp(16), dp(24), dp(24)); text.setTextIsSelectable(true); scroll.addView(text); stage.addView(scroll, new FrameLayout.LayoutParams(-1, -1)); return;
         }
         if ("image".equals(item.optString("kind"))) { stage.addView(images.frame(item, false), new FrameLayout.LayoutParams(-1, -1)); return; }
-        if (!"video".equals(item.optString("kind"))) { status.setText("No saved preview. Open Details to view the source."); stage.addView(status, new FrameLayout.LayoutParams(-1, -1)); return; }
+        if (!"video".equals(item.optString("kind"))) { status.setText("No saved preview. Open the pin menu to view the original."); stage.addView(status, new FrameLayout.LayoutParams(-1, -1)); return; }
         mediaWidth = item.optInt("width"); mediaHeight = item.optInt("height");
         poster = desktop == null || item.has("thumbnailUrl") ? images.frame(item, true) : null;
         if (poster != null) stage.addView(poster, new FrameLayout.LayoutParams(-1, -1));
@@ -109,9 +126,9 @@ final class PinViewer extends Dialog {
             video.setOnPreparedListener(player -> { if (video != active) return; prepared = true; player.setLooping(true); mediaWidth = player.getVideoWidth(); mediaHeight = player.getVideoHeight(); fitVideo(); seek.setEnabled(true); if (position > 0) video.seekTo(position); if (playing) video.start(); else { video.seekTo(Math.max(1, position)); status.setVisibility(View.GONE); } updateProgress(); handler.removeCallbacks(tick); handler.post(tick); });
             video.setOnInfoListener((player, what, extra) -> { if (video != active) return false; if (what == android.media.MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START || what == android.media.MediaPlayer.MEDIA_INFO_BUFFERING_END) { status.setVisibility(View.GONE); if (poster != null) poster.setVisibility(View.GONE); } else if (what == android.media.MediaPlayer.MEDIA_INFO_BUFFERING_START) { status.setText("Loading video…"); status.setVisibility(View.VISIBLE); } return false; });
             video.setOnCompletionListener(player -> { if (video != active) return; playing = false; play.setText("Play"); play.setContentDescription("Play video"); updateProgress(); });
-            video.setOnErrorListener((player, what, extra) -> { if (video != active) return true; prepared = false; playing = false; seek.setEnabled(false); status.setVisibility(View.VISIBLE); status.setText("This video cannot be played. Retry or open its source in Details."); play.setText("Retry"); play.setContentDescription("Retry video"); return true; });
+            video.setOnErrorListener((player, what, extra) -> { if (video != active) return true; prepared = false; playing = false; seek.setEnabled(false); status.setVisibility(View.VISIBLE); status.setText("This video cannot be played. Retry or open the original from the pin menu."); play.setText("Retry"); play.setContentDescription("Retry video"); return true; });
             if (desktop != null) { String url = item.optString("originalUrl", item.optString("previewUrl")); video.setVideoURI(Uri.parse(url), desktop.videoHeaders(url)); }
-            else if (localFile != null) video.setVideoURI(Uri.fromFile(localFile)); else throw new Exception("Saved video is unavailable.");
+            else { File file = item.has("mediaFile") ? MobileLibrary.get(getContext()).mediaFile(item.optString("mediaFile")) : localFile; if (file == null) throw new Exception("Saved video is unavailable."); video.setVideoURI(Uri.fromFile(file)); }
         } catch (Exception error) { status.setText(error.getMessage()); play.setText("Retry"); play.setContentDescription("Retry video"); }
     }
     private void fitVideo() {
@@ -149,5 +166,5 @@ final class PinViewer extends Dialog {
     int position() { return video != null && prepared ? video.getCurrentPosition() : position; }
     boolean playing() { return video != null && prepared ? video.isPlaying() : playing; }
     private void stopVideo() { handler.removeCallbacks(tick); if (video != null) video.stopPlayback(); video = null; prepared = false; }
-    @Override public void dismiss() { stopVideo(); super.dismiss(); }
+    @Override public void dismiss() { if (toolbar != null) toolbar.dismissPopupMenus(); stopVideo(); super.dismiss(); }
 }

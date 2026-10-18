@@ -8,8 +8,8 @@ android {
         applicationId 'com.papan.share'
         minSdk 26
         targetSdk 35
-        versionCode 5
-        versionName '0.3.1'
+        versionCode 6
+        versionName '0.3.2'
     }
     flavorDimensions = ['installation']
     productFlavors {
@@ -18,23 +18,28 @@ android {
     }
     sourceSets {
         main { manifest.srcFile 'AndroidManifest.xml'; java.srcDirs = ['src']; res.srcDirs = ['res']; assets.srcDirs = ['../artifacts/android/gradle-assets'] }
-        isolated { manifest.srcFile 'isolated-manifest.xml'; java.srcDirs = ['test'] }
+        isolated { manifest.srcFile 'isolated-manifest.xml'; java.srcDirs = ['test']; res.srcDirs = ['test-res'] }
     }
     buildTypes {
         release { minifyEnabled false; signingConfig null }
         qa { debuggable true; minifyEnabled false; signingConfig null; matchingFallbacks = ['debug', 'release'] }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_1_8; targetCompatibility JavaVersion.VERSION_1_8 }
+    packagingOptions { jniLibs { useLegacyPackaging = true } }
 }
 dependencies {
     implementation 'com.google.android.material:material:1.13.0'
     implementation 'androidx.recyclerview:recyclerview:1.2.1'
     implementation 'com.google.zxing:core:3.5.4'
+    implementation 'io.github.junkfood02.youtubedl-android:library:0.18.1'
+    implementation 'io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1'
 }
 configurations { sourceArchives { transitive = false } }
 dependencies {
     sourceArchives 'com.google.android.material:material:1.13.0:sources@jar'
     sourceArchives 'com.google.zxing:core:3.5.4:sources@jar'
+    sourceArchives 'io.github.junkfood02.youtubedl-android:library:0.18.1:sources@jar'
+    sourceArchives 'io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1:sources@jar'
 }
 tasks.register('copyDependencySources', Copy) {
     from configurations.sourceArchives
